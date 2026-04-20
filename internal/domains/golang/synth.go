@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/forgant-foundry/eventing"
+	"github.com/forgant-foundry/forglet/internal/project"
 )
 
 const (
@@ -73,7 +74,8 @@ func (s *Flat) Synthesize(dir string, aggregates map[string]*eventing.Aggregate)
 		if err != nil {
 			return fmt.Errorf("render go.mod: %w", err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, "go.mod"), b, 0644); err != nil {
+		b = project.AddTextMarker(b, "//")
+		if err := project.WriteManaged(filepath.Join(dir, "go.mod"), b); err != nil {
 			return err
 		}
 	}
@@ -149,7 +151,8 @@ func (s *Workspace) Synthesize(dir string, aggregates map[string]*eventing.Aggre
 	if err != nil {
 		return fmt.Errorf("render go.work: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "go.work"), b, 0644); err != nil {
+	b = project.AddTextMarker(b, "//")
+	if err := project.WriteManaged(filepath.Join(dir, "go.work"), b); err != nil {
 		return err
 	}
 

@@ -161,6 +161,34 @@ func TestGoFlat_Idempotent(t *testing.T) {
 	}
 }
 
+func TestGoFlat_Synthesize_GoModReadOnly(t *testing.T) {
+	dir := testutil.TempDir(t)
+	s := goproj.NewFlat()
+	if err := project.New(dir).Init(project.Meta{Name: "myapp", Template: "go"}, s); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0444 {
+		t.Errorf("go.mod mode = %04o, want 0444", info.Mode().Perm())
+	}
+}
+
+func TestGoFlat_Synthesize_GoModHasMarker(t *testing.T) {
+	dir := testutil.TempDir(t)
+	s := goproj.NewFlat()
+	if err := project.New(dir).Init(project.Meta{Name: "myapp", Template: "go"}, s); err != nil {
+		t.Fatal(err)
+	}
+	content := readFile(t, filepath.Join(dir, "go.mod"))
+	if !strings.HasPrefix(content, "// ") {
+		t.Errorf("go.mod does not start with comment marker, got: %q", content[:min(40, len(content))])
+	}
+	assertContains(t, content, "forglet")
+}
+
 func TestGoFlat_RequireAccumulates(t *testing.T) {
 	dir := testutil.TempDir(t)
 	s := goproj.NewFlat()
@@ -306,6 +334,34 @@ func TestGoWorkspace_Idempotent(t *testing.T) {
 	if first != second {
 		t.Errorf("go.work changed after second synth:\nfirst:\n%s\nsecond:\n%s", first, second)
 	}
+}
+
+func TestGoWorkspace_Synthesize_GoWorkReadOnly(t *testing.T) {
+	dir := testutil.TempDir(t)
+	s := goproj.NewWorkspace()
+	if err := project.New(dir).Init(project.Meta{Name: "myws", Template: "go-workspace"}, s); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(dir, "go.work"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0444 {
+		t.Errorf("go.work mode = %04o, want 0444", info.Mode().Perm())
+	}
+}
+
+func TestGoWorkspace_Synthesize_GoWorkHasMarker(t *testing.T) {
+	dir := testutil.TempDir(t)
+	s := goproj.NewWorkspace()
+	if err := project.New(dir).Init(project.Meta{Name: "myws", Template: "go-workspace"}, s); err != nil {
+		t.Fatal(err)
+	}
+	content := readFile(t, filepath.Join(dir, "go.work"))
+	if !strings.HasPrefix(content, "// ") {
+		t.Errorf("go.work does not start with comment marker, got: %q", content[:min(40, len(content))])
+	}
+	assertContains(t, content, "forglet")
 }
 
 func TestGoWorkspace_UseAccumulates(t *testing.T) {

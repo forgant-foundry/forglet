@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/forgant-foundry/eventing"
+	"github.com/forgant-foundry/forglet/internal/project"
 )
 
 // overlaySeqBase ensures overlay events always have higher seq than template
@@ -109,7 +110,8 @@ func (s *TypeScript) Synthesize(dir string, aggregates map[string]*eventing.Aggr
 		if err != nil {
 			return fmt.Errorf("serialize %s: %w", filename, err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, filename), b, 0644); err != nil {
+		b = project.AddJSONMarker(b)
+		if err := project.WriteManaged(filepath.Join(dir, filename), b); err != nil {
 			return err
 		}
 	}

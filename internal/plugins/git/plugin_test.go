@@ -110,6 +110,40 @@ func TestGitPlugin_UnknownTemplate_Noop(t *testing.T) {
 	}
 }
 
+func TestGitPlugin_GitignoreReadOnly(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\n")
+
+	if err := p.Init(project.Meta{Name: "my-app", Template: "node-ts"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Stat(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0444 {
+		t.Errorf(".gitignore mode = %04o, want 0444", info.Mode().Perm())
+	}
+}
+
+func TestGitPlugin_GitignoreHasMarker(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\n")
+
+	if err := p.Init(project.Meta{Name: "my-app", Template: "node-ts"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	if !strings.HasPrefix(content, "# ") {
+		t.Errorf(".gitignore does not start with '#' comment marker, got: %q", content)
+	}
+	if !strings.Contains(content, "forglet") {
+		t.Error(".gitignore marker does not mention forglet")
+	}
+}
+
 func TestGitPlugin_Idempotent(t *testing.T) {
 	dir, p := setup(t)
 	writeRC(t, dir, "git: true\n")

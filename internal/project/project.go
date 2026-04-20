@@ -257,7 +257,8 @@ func (p *Project) renderCrossCuttingFiles(aggregates map[string]*eventing.Aggreg
 				fmt.Fprintf(&buf, "%s\n", n.Name)
 			}
 		}
-		if err := os.WriteFile(filepath.Join(p.root, filename), buf.Bytes(), 0644); err != nil {
+		content := AddTextMarker(buf.Bytes(), "#")
+		if err := WriteManaged(filepath.Join(p.root, filename), content); err != nil {
 			return err
 		}
 	}

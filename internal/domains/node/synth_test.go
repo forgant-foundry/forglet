@@ -260,6 +260,45 @@ func TestTypeScript_Synthesize_OverlayMergesIntoPackageJSON(t *testing.T) {
 	}
 }
 
+// TestTypeScript_Synthesize_FilesReadOnly checks that managed files are written read-only.
+func TestTypeScript_Synthesize_FilesReadOnly(t *testing.T) {
+	dir := testutil.TempDir(t)
+	s := node.NewTypeScript()
+	fileEvents, _ := s.InitializeEvents("my-app")
+	aggregates := project.BuildAggregates(fileEvents, nil)
+	if err := s.Synthesize(dir, aggregates); err != nil {
+		t.Fatal(err)
+	}
+	for _, filename := range []string{"package.json", "tsconfig.json"} {
+		info, err := os.Stat(filepath.Join(dir, filename))
+		if err != nil {
+			t.Fatalf("%s not found: %v", filename, err)
+		}
+		if info.Mode().Perm() != 0444 {
+			t.Errorf("%s mode = %04o, want 0444", filename, info.Mode().Perm())
+		}
+	}
+}
+
+// TestTypeScript_Synthesize_PackageJSONHasMarker checks the managed-file comment is present.
+func TestTypeScript_Synthesize_PackageJSONHasMarker(t *testing.T) {
+	dir := testutil.TempDir(t)
+	s := node.NewTypeScript()
+	fileEvents, _ := s.InitializeEvents("my-app")
+	aggregates := project.BuildAggregates(fileEvents, nil)
+	if err := s.Synthesize(dir, aggregates); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "package.json"))
+	var pkg map[string]any
+	if err := json.Unmarshal(b, &pkg); err != nil {
+		t.Fatalf("package.json is not valid JSON after marker: %v", err)
+	}
+	if _, ok := pkg["//"]; !ok {
+		t.Error(`package.json missing "//" marker key`)
+	}
+}
+
 // TestTypeScript_Synthesize_IndexTsNotOverwritten checks the scaffold file is preserved.
 func TestTypeScript_Synthesize_IndexTsNotOverwritten(t *testing.T) {
 	dir := testutil.TempDir(t)
