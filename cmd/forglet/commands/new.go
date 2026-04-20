@@ -5,13 +5,16 @@ import (
 	"os"
 	"path/filepath"
 
+	goproj "github.com/forgant-foundry/forglet/internal/domains/golang"
 	"github.com/forgant-foundry/forglet/internal/domains/node"
 	"github.com/forgant-foundry/forglet/internal/project"
 	"github.com/spf13/cobra"
 )
 
 var synthesizers = map[string]project.Synthesizer{
-	"node-ts": node.NewTypeScript(),
+	"go":           goproj.NewFlat(),
+	"go-workspace": goproj.NewWorkspace(),
+	"node-ts":      node.NewTypeScript(),
 }
 
 var newCmd = &cobra.Command{
@@ -23,7 +26,7 @@ var newCmd = &cobra.Command{
 
 		s, ok := synthesizers[template]
 		if !ok {
-			return fmt.Errorf("unknown template %q — available: node-ts", template)
+			return fmt.Errorf("unknown template %q — available: go, go-workspace, node-ts", template)
 		}
 
 		dir := filepath.Join(".", name)

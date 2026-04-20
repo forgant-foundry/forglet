@@ -18,6 +18,8 @@ go test ./...
 # Run a single test
 go test -run TestName ./internal/project/
 go test -run TestName ./internal/domains/node/
+go test -run TestName ./internal/domains/golang/
+go test -run TestName ./internal/plugins/git/
 
 # Inspect output during test development
 FORGLET_KEEP_TEMP=1 go test -v ./...
@@ -71,11 +73,21 @@ Plugins are Go packages compiled into a custom forglet binary. They implement `p
 
 ```go
 type Plugin interface {
-    Weave(projectName string, stream *EventStream) error
+    Weave(meta Meta, rc map[string]any, stream *EventStream) error
 }
 ```
 
+`meta` carries the template name and project name; `rc` is the full parsed `.forglet.yml` map. Together they let a plugin be both template-aware (select behaviour by `meta.Template`) and project-config-aware (activate conditionally via rc keys).
+
 Platform engineers build a custom `main.go` that calls `commands.RegisterPlugin` before `commands.Execute`. The `cmd/forglet/commands/plugins.go` file holds the registered plugin slice; both `new` and `synth` commands pass it to `project.New(...).WithPlugins(registeredPlugins...)`.
+
+### Cross-Cutting Files
+
+Files that no single synthesizer owns — `.gitignore` is the canonical example — are handled by the project layer. After `BuildAggregates`, `Project.Synthesize` calls `renderCrossCuttingFiles`, which writes any aggregate whose filename is in `patternFiles` (defined in `project.go`) as a pattern-per-line text file.
+
+This means a plugin can append events to `.gitignore` and they will be rendered without any synthesizer knowing. Adding a new cross-cutting pattern file requires only adding its name to `patternFiles`.
+
+The `internal/plugins/git` package is the reference implementation: `GitPlugin.Weave` checks `rc["git"].(bool)`, looks up patterns by `meta.Template`, and appends them to the `.gitignore` stream. Adding support for a new template is a single entry in the `patterns` map.
 
 ### EventStream (plugin weaving)
 
@@ -94,21 +106,28 @@ Platform engineers build a custom `main.go` that calls `commands.RegisterPlugin`
 The rc file format is **template-aware**: the synthesizer defines what keys it recognises and what those keys do. The key in the rc file might generate events across multiple files or enforce constraints — it is not a generic key-value system.
 
 ```yaml
-# .forglet.yml (node-ts supported keys)
-devDependencies:
+# .forglet.yml
+
+# Template-aware keys — interpreted by the synthesizer's OverlayEvents:
+devDependencies:        # node-ts: adds to package.json devDependencies
   prettier: "^3.0.0"
-scripts:
+scripts:                # node-ts: adds to package.json scripts
   lint: "eslint src/"
+
+# Cross-cutting keys — interpreted by registered plugins, not the synthesizer:
+git: true               # GitPlugin: creates .gitignore with template-appropriate patterns
 ```
 
-Each synthesizer implements `OverlayEvents(rc)` to translate these keys into events. The RC overlay always wins over template and plugin layers.
+Template-aware keys are synthesizer-specific — `OverlayEvents(rc)` translates them into events for the right files. Cross-cutting keys are owned by plugins; adding a new cross-cutting behaviour never requires touching a synthesizer. The RC overlay always wins over both template and plugin layers.
 
 ### Module Structure
 
 Single `go.mod` at the root (`github.com/forgant-foundry/forglet`):
 - `cmd/forglet/` — CLI entry point (Cobra); `commands/new.go` maps template names to synthesizers; `commands/plugins.go` holds `RegisterPlugin`
-- `internal/project/` — `Project` type, `Synthesizer` and `Plugin` interfaces, `EventStream`, aggregate merge logic
+- `internal/project/` — `Project` type, `Synthesizer` and `Plugin` interfaces, `EventStream`, aggregate merge logic, cross-cutting file rendering
 - `internal/domains/node/` — `node-ts` synthesizer (`package.json`, `tsconfig.json`, `src/index.ts` scaffold)
+- `internal/domains/golang/` — `go` and `go-workspace` synthesizers (`go.mod` / `go.work`, module scaffolds)
+- `internal/plugins/git/` — `GitPlugin`: cross-cutting `.gitignore` support driven by `meta.Template` + `rc["git"]`
 - `internal/testutil/` — shared `TempDir` helper
 
 ### Testing Conventions

@@ -65,7 +65,7 @@ The RC overlay always wins over both the template and plugins — it is the last
 
 ## Implement a plugin
 
-A plugin is a Go package that implements `project.Plugin`:
+A plugin is a Go package that implements `project.Plugin`. Plugins receive both the project `Meta` (including the template name) and the full RC map, so they can be both template-aware and conditionally activated by per-project config:
 
 ```go
 package myplugin
@@ -79,7 +79,11 @@ import (
 
 type StandardsPlugin struct{}
 
-func (p *StandardsPlugin) Weave(_ string, stream *project.EventStream) error {
+func (p *StandardsPlugin) Weave(meta project.Meta, rc map[string]any, stream *project.EventStream) error {
+    // Template-aware: only add ESLint config for node-ts projects.
+    if meta.Template != "node-ts" {
+        return nil
+    }
     payload, _ := json.Marshal(map[string]any{
         "devDependencies": map[string]any{"eslint": "^8.0.0"},
     })
@@ -104,6 +108,12 @@ func (p *StandardsPlugin) Weave(_ string, stream *project.EventStream) error {
 | `Remove(file, eventType)` | Remove all events of that type |
 
 Plugins run after the template layer and before the `.forglet.yml` overlay, so the overlay can still override anything a plugin sets.
+
+### Cross-cutting files
+
+Some files — like `.gitignore` — are not owned by any one synthesizer. Instead, any plugin can contribute events to them by appending to the appropriate filename in the stream. The project layer recognises these **cross-cutting files** and renders them automatically (one pattern per line, sorted alphabetically), without the synthesizer needing to know they exist.
+
+The built-in `internal/plugins/git` plugin demonstrates this: when `git: true` appears in `.forglet.yml`, it selects the right patterns for the project's template and appends them to `.gitignore`. No synthesizer changes are needed when a new template is added — only the plugin's pattern map needs a new entry.
 
 ## Wire a plugin into a custom binary
 
@@ -137,6 +147,10 @@ Set `FORGLET_KEEP_TEMP=1` when running tests to preserve temp directories for in
 
 ## Templates
 
-| Template  | Managed files                   |
-|-----------|---------------------------------|
-| `node-ts` | `package.json`, `tsconfig.json` |
+| Template       | Managed files                        | Scaffolded (once)              |
+|----------------|--------------------------------------|--------------------------------|
+| `node-ts`      | `package.json`, `tsconfig.json`      | `src/index.ts`                 |
+| `go`           | `go.mod`                             | `main.go`                      |
+| `go-workspace` | `go.work`                            | `<name>/go.mod`, `<name>/main.go` |
+
+Cross-cutting files (e.g. `.gitignore`) are managed by plugins, not by synthesizers, and work across all templates.

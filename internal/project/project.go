@@ -1,6 +1,7 @@
 package project
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -34,10 +35,11 @@ type Synthesizer interface {
 
 // Plugin contributes to a project by weaving events into the event stream
 // between the template layer and the RC overlay layer. Plugins receive the
-// full stream and can insert, replace, or remove events at any position —
-// not just append — giving full control over the synthesized output.
+// project Meta and the RC map so they can be both template-aware and
+// project-config-aware, and can insert, replace, or remove events at any
+// position — not just append — giving full control over the synthesized output.
 type Plugin interface {
-	Weave(projectName string, stream *EventStream) error
+	Weave(meta Meta, rc map[string]any, stream *EventStream) error
 }
 
 // Project manages a forglet project rooted at a directory.
@@ -88,7 +90,7 @@ func (p *Project) Synthesize(s Synthesizer) error {
 
 	stream := NewEventStream(templateEvents)
 	for _, plugin := range p.plugins {
-		if err := plugin.Weave(meta.Name, stream); err != nil {
+		if err := plugin.Weave(meta, rc, stream); err != nil {
 			return err
 		}
 	}
@@ -103,6 +105,9 @@ func (p *Project) Synthesize(s Synthesizer) error {
 		if err := p.saveAggregate(filename, agg); err != nil {
 			return err
 		}
+	}
+	if err := p.renderCrossCuttingFiles(aggregates); err != nil {
+		return err
 	}
 	return s.Synthesize(p.root, aggregates)
 }
@@ -235,6 +240,33 @@ func (p *Project) loadRC() (map[string]any, error) {
 	var rc map[string]any
 	return rc, yaml.Unmarshal(b, &rc)
 }
+
+// renderCrossCuttingFiles writes files that plugins may contribute to regardless
+// of which synthesizer is active. These files use a "keys as lines" model —
+// each active top-level node name is written as one line (sorted alphabetically).
+// New cross-cutting files can be added to patternFiles as needed.
+func (p *Project) renderCrossCuttingFiles(aggregates map[string]*eventing.Aggregate) error {
+	for _, filename := range patternFiles {
+		agg, ok := aggregates[filename]
+		if !ok {
+			continue
+		}
+		var buf bytes.Buffer
+		for _, n := range agg.Value {
+			if n.Status == eventing.NodeActive {
+				fmt.Fprintf(&buf, "%s\n", n.Name)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(p.root, filename), buf.Bytes(), 0644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// patternFiles are cross-cutting files whose content is derived entirely from
+// top-level node names in the aggregate — one pattern per line, alphabetical.
+var patternFiles = []string{".gitignore"}
 
 // saveAggregate writes the aggregate snapshot to .forglet/<filename>.json.
 func (p *Project) saveAggregate(filename string, agg *eventing.Aggregate) error {

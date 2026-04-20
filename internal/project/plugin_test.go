@@ -16,7 +16,7 @@ type stubPlugin struct {
 	events map[string][]eventing.Event
 }
 
-func (p *stubPlugin) Weave(_ string, stream *project.EventStream) error {
+func (p *stubPlugin) Weave(_ project.Meta, _ map[string]any, stream *project.EventStream) error {
 	for file, events := range p.events {
 		stream.Append(file, events...)
 	}
@@ -30,7 +30,7 @@ type insertingPlugin struct {
 	newEvents []eventing.Event
 }
 
-func (p *insertingPlugin) Weave(_ string, stream *project.EventStream) error {
+func (p *insertingPlugin) Weave(_ project.Meta, _ map[string]any, stream *project.EventStream) error {
 	stream.InsertAfter(p.file, p.after, p.newEvents...)
 	return nil
 }
@@ -42,7 +42,7 @@ type replacingPlugin struct {
 	newEvents   []eventing.Event
 }
 
-func (p *replacingPlugin) Weave(_ string, stream *project.EventStream) error {
+func (p *replacingPlugin) Weave(_ project.Meta, _ map[string]any, stream *project.EventStream) error {
 	stream.Replace(p.file, p.replaceType, p.newEvents...)
 	return nil
 }
