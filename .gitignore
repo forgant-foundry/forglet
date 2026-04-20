@@ -1,0 +1,10 @@
+# Binaries
+/forglet
+*.exe
+
+# Go build/test cache
+*.test
+*.out
+
+# Go workspace sum (generated)
+go.work.sum
