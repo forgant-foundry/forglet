@@ -42,6 +42,14 @@ type Plugin interface {
 	Weave(meta Meta, rc map[string]any, stream *EventStream) error
 }
 
+// Scaffolder is an optional interface that plugins implement to write one-time
+// scaffold files (e.g. bin/app.ts, lib/stack.ts). Scaffold is called once
+// during Init, after synthesis, and never during re-synth. Implementations
+// must be idempotent: check whether the file exists before writing.
+type Scaffolder interface {
+	Scaffold(dir string, meta Meta) error
+}
+
 // Project manages a forglet project rooted at a directory.
 type Project struct {
 	root       string
@@ -65,7 +73,9 @@ func (p *Project) WithValidators(validators ...Validator) *Project {
 	return p
 }
 
-// Init creates .forglet/, writes metadata, and synthesizes all managed files.
+// Init creates .forglet/, writes metadata, synthesizes all managed files, and
+// runs any plugin Scaffolders. Scaffolding happens after synthesis and only
+// during Init — re-synth never touches scaffold files.
 func (p *Project) Init(meta Meta, s Synthesizer) error {
 	if err := os.MkdirAll(filepath.Join(p.root, forgletDir), 0755); err != nil {
 		return err
@@ -73,7 +83,17 @@ func (p *Project) Init(meta Meta, s Synthesizer) error {
 	if err := p.SaveMeta(meta); err != nil {
 		return err
 	}
-	return p.Synthesize(s)
+	if err := p.Synthesize(s); err != nil {
+		return err
+	}
+	for _, plugin := range p.plugins {
+		if sc, ok := plugin.(Scaffolder); ok {
+			if err := sc.Scaffold(p.root, meta); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // Synthesize re-derives all event layers and writes managed files.
@@ -285,7 +305,7 @@ var patternFiles = []string{".gitignore"}
 // jsonCrossCuttingFiles are cross-cutting files rendered as pretty-printed JSON
 // from their aggregate. Plugins contribute to these via the EventStream; no
 // synthesizer needs to know they exist.
-var jsonCrossCuttingFiles = []string{"lerna.json"}
+var jsonCrossCuttingFiles = []string{"cdk.json", "lerna.json"}
 
 // renderJSONCrossCuttingFiles writes JSON cross-cutting files from their aggregates.
 func (p *Project) renderJSONCrossCuttingFiles(aggregates map[string]*eventing.Aggregate) error {
