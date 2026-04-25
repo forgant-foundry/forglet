@@ -28,6 +28,12 @@ func (s *TypeScript) InitializeEvents(name string) (map[string][]eventing.Event,
 			"version": "0.1.0",
 			"private": true,
 		}},
+		{"engines.set", map[string]any{
+			"engines": map[string]any{
+				"node": ">=22.0.0",
+				"npm":  ">=11.0.0",
+			},
+		}},
 		{"scripts.added", map[string]any{
 			"scripts": map[string]any{
 				"build":       "tsc",
@@ -37,7 +43,9 @@ func (s *TypeScript) InitializeEvents(name string) (map[string][]eventing.Event,
 		}},
 		{"devDependency.added", map[string]any{
 			"devDependencies": map[string]any{
-				"typescript":              "^5.0.0",
+				"typescript":              "^6.0.0",
+				"ts-node":                 "^10.9.2",
+				"@types/node":             "^25.0.0",
 				"@lavamoat/allow-scripts": "^3.3.1",
 			},
 		}},
@@ -49,12 +57,18 @@ func (s *TypeScript) InitializeEvents(name string) (map[string][]eventing.Event,
 	tsconfig, err := makeEvents(1, []evtDef{
 		{"init", map[string]any{
 			"compilerOptions": map[string]any{
-				"esModuleInterop": true,
-				"module":          "commonjs",
-				"outDir":          "dist",
-				"rootDir":         "src",
-				"strict":          true,
-				"target":          "ES2020",
+				"esModuleInterop":            true,
+				"module":                     "commonjs",
+				"outDir":                     "dist",
+				"rootDir":                    "src",
+				"strict":                     true,
+				"target":                     "ES2020",
+				"sourceMap":                  true,
+				"declaration":                true,
+				"declarationMap":             true,
+				"noUncheckedIndexedAccess":   true,
+				"exactOptionalPropertyTypes": true,
+				"skipLibCheck":               true,
 			},
 		}},
 	})

@@ -14,6 +14,7 @@ import (
 var synthesizers = map[string]project.Synthesizer{
 	"go":           goproj.NewFlat(),
 	"go-workspace": goproj.NewWorkspace(),
+	"node-js":      node.NewJavaScript(),
 	"node-ts":      node.NewTypeScript(),
 }
 
@@ -26,7 +27,7 @@ var newCmd = &cobra.Command{
 
 		s, ok := synthesizers[template]
 		if !ok {
-			return fmt.Errorf("unknown template %q — available: go, go-workspace, node-ts", template)
+			return fmt.Errorf("unknown template %q — available: go, go-workspace, node-js, node-ts", template)
 		}
 
 		dir := filepath.Join(".", name)
