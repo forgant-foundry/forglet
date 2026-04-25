@@ -63,6 +63,127 @@ scripts:
 
 The RC overlay always wins over both the template and plugins — it is the last layer applied. Run `forglet synth` after editing `.forglet.yml`.
 
+### .forglet.yml key reference
+
+Each template defines its own recognised keys. Unrecognised keys are silently ignored.
+
+**Go templates** (`go`, `go-lambda`)
+
+```yaml
+module: "github.com/myorg/myapp"   # module path in go.mod
+go: "1.23"                         # Go version
+require:
+  github.com/spf13/cobra: "v1.8.0" # additional dependencies
+```
+
+**Go workspace** (`go-workspace`)
+
+```yaml
+go: "1.23"
+use:                               # additional workspace members (beyond the default)
+  - services/api
+  - services/worker
+```
+
+**Go Knative** (`go-knative`)
+
+```yaml
+module: "github.com/myorg/myhandler"
+go: "1.23"
+require:
+  github.com/some/lib: "v1.0.0"
+name: "my-handler"                 # Knative func name in func.yaml
+registry: "gcr.io/myproject"       # container registry in func.yaml
+```
+
+**Java templates** (`java`, `java-lambda`, `java-spring`)
+
+```yaml
+groupId: "com.mycompany"
+version: "2.0.0-SNAPSHOT"
+javaVersion: "17"
+dependencies:
+  "com.google.guava:guava": "33.0.0-jre"
+testDependencies:
+  "org.mockito:mockito-core": "5.11.0"
+```
+
+**Java multimodule** (`java-multimodule`)
+
+Same keys as above, plus:
+
+```yaml
+modules:
+  - core
+  - api
+  - web
+```
+
+**Node templates** (`node-ts`, `node-js`, `node-lambda`)
+
+```yaml
+dependencies:
+  express: "^4.18.0"
+devDependencies:
+  prettier: "^3.0.0"
+scripts:
+  lint: "eslint src/"
+  format: "prettier --write ."
+allowScripts:                      # @lavamoat/allow-scripts configuration
+  "esbuild": true
+```
+
+## Plugins
+
+### Default binary
+
+The stock `forglet` binary ships with two plugins registered:
+
+**GitPlugin** — synthesizes a `.gitignore` appropriate for the active template. Activate per-project with `git: true` in `.forglet.yml`. Template-aware: selects pattern sets for node, go, and java templates.
+
+```yaml
+# .forglet.yml
+git: true
+```
+
+**NpmScriptPolicyValidator** — enforces that `@lavamoat/allow-scripts` is configured in node-ts projects. Runs automatically after every synthesis; no activation required.
+
+### Available for custom binaries
+
+The following plugins are included in the repository and can be registered in a custom binary. None are wired into the default binary because they represent optional platform choices.
+
+| Package | Type | What it does |
+|---|---|---|
+| `internal/plugins/cdk` | Plugin + Scaffolder | AWS CDK devDependencies, `cdk.json`, and `bin/app.ts` + `lib/stack.ts` scaffolds for `node-ts` |
+| `internal/plugins/knative` | Plugin + Scaffolder | `.knative/service.yaml`, `.dockerignore`, and `Dockerfile` scaffold for `node-ts` |
+| `internal/plugins/lerna` | Plugin | `lerna.json` and `lerna` devDependency for `node-ts`; pair with WorkspacesPlugin |
+| `internal/plugins/workspaces` | Plugin | `private: true` and `workspaces: ["packages/*"]` for `node-ts` |
+
+Register any combination in a custom `main.go`:
+
+```go
+package main
+
+import (
+    "fmt"
+    "os"
+
+    "github.com/forgant-foundry/forglet/cmd/forglet/commands"
+    "github.com/forgant-foundry/forglet/internal/plugins/cdk"
+    "github.com/forgant-foundry/forglet/internal/plugins/git"
+    "github.com/forgant-foundry/forglet/internal/plugins/lerna"
+    "github.com/forgant-foundry/forglet/internal/plugins/workspaces"
+)
+
+func main() {
+    commands.RegisterPlugin(git.New(), workspaces.New(), lerna.New(), cdk.New())
+    if err := commands.Execute(); err != nil {
+        fmt.Fprintln(os.Stderr, err)
+        os.Exit(1)
+    }
+}
+```
+
 ## Implement a plugin
 
 A plugin is a Go package that implements `project.Plugin`. Plugins receive both the project `Meta` (including the template name) and the full RC map, so they can be both template-aware and conditionally activated by per-project config:
