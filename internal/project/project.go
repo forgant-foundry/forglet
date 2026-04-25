@@ -116,6 +116,9 @@ func (p *Project) Synthesize(s Synthesizer) error {
 	if err := p.renderCrossCuttingFiles(aggregates); err != nil {
 		return err
 	}
+	if err := p.renderJSONCrossCuttingFiles(aggregates); err != nil {
+		return err
+	}
 	if err := s.Synthesize(p.root, aggregates); err != nil {
 		return err
 	}
@@ -278,6 +281,38 @@ func (p *Project) renderCrossCuttingFiles(aggregates map[string]*eventing.Aggreg
 // patternFiles are cross-cutting files whose content is derived entirely from
 // top-level node names in the aggregate — one pattern per line, alphabetical.
 var patternFiles = []string{".gitignore"}
+
+// jsonCrossCuttingFiles are cross-cutting files rendered as pretty-printed JSON
+// from their aggregate. Plugins contribute to these via the EventStream; no
+// synthesizer needs to know they exist.
+var jsonCrossCuttingFiles = []string{"lerna.json"}
+
+// renderJSONCrossCuttingFiles writes JSON cross-cutting files from their aggregates.
+func (p *Project) renderJSONCrossCuttingFiles(aggregates map[string]*eventing.Aggregate) error {
+	for _, filename := range jsonCrossCuttingFiles {
+		agg, ok := aggregates[filename]
+		if !ok {
+			continue
+		}
+		raw, err := agg.ToJSON()
+		if err != nil {
+			return fmt.Errorf("serialize %s: %w", filename, err)
+		}
+		var v any
+		if err := json.Unmarshal(raw, &v); err != nil {
+			return fmt.Errorf("re-parse %s: %w", filename, err)
+		}
+		b, err := json.MarshalIndent(v, "", "  ")
+		if err != nil {
+			return fmt.Errorf("indent %s: %w", filename, err)
+		}
+		b = AddJSONMarker(b)
+		if err := WriteManaged(filepath.Join(p.root, filename), b); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // saveAggregate writes the aggregate snapshot to .forglet/<filename>.json.
 func (p *Project) saveAggregate(filename string, agg *eventing.Aggregate) error {
