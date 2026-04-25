@@ -1,0 +1,44 @@
+version: 2
+
+project_name: forglet
+
+builds:
+  - id: forglet
+    main: ./cmd/forglet
+    binary: forglet
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/forgant-foundry/forglet/cmd/forglet/commands.Version={{.Version}}
+
+archives:
+  - id: forglet
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  github:
+    owner: forgant-foundry
+    name: forglet
+  # Keep releases private: only people with repo access can download.
+  # Set to true to draft first and publish manually.
+  draft: false

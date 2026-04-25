@@ -14,7 +14,10 @@ import (
 var synthesizers = map[string]project.Synthesizer{
 	"go":           goproj.NewFlat(),
 	"go-workspace": goproj.NewWorkspace(),
+	"go-lambda":    goproj.NewLambda(),
+	"go-knative":   goproj.NewKnativeFunc(),
 	"node-js":      node.NewJavaScript(),
+	"node-lambda":  node.NewLambda(),
 	"node-ts":      node.NewTypeScript(),
 }
 
@@ -27,7 +30,7 @@ var newCmd = &cobra.Command{
 
 		s, ok := synthesizers[template]
 		if !ok {
-			return fmt.Errorf("unknown template %q — available: go, go-workspace, node-js, node-ts", template)
+			return fmt.Errorf("unknown template %q — available: go, go-knative, go-lambda, go-workspace, node-js, node-lambda, node-ts", template)
 		}
 
 		dir := filepath.Join(".", name)

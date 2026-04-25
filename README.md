@@ -136,6 +136,44 @@ func main() {
 
 Build and distribute this binary to your engineers in place of the vanilla `forglet` binary. All `forglet new` and `forglet synth` invocations will then include the plugin's events automatically.
 
+## Private module access
+
+Forglet and its dependencies (`eventing`) live in private GitHub repositories. Go's toolchain needs explicit configuration to fetch them without falling back to the public module proxy.
+
+### Local development
+
+Add the following to your shell profile (or `.envrc` if you use direnv):
+
+```bash
+export GOPRIVATE=github.com/forgant-foundry/*
+```
+
+This tells Go not to route `forgant-foundry/*` imports through the public proxy or checksum database. Authentication is handled by git — configure it once with a [GitHub personal access token](https://github.com/settings/tokens) that has `Contents: Read` on the relevant repos:
+
+```bash
+git config --global \
+  url."https://<YOUR_GITHUB_TOKEN>@github.com/forgant-foundry/".insteadOf \
+  "https://github.com/forgant-foundry/"
+```
+
+After that, `go get`, `go mod tidy`, and `go build` all work without any further prompts.
+
+### CI
+
+In GitHub Actions, store a PAT with `repo` read scope as a repository secret named `FORGANT_TOKEN` and configure the same git URL rewrite in your workflow:
+
+```yaml
+- name: Configure private module access
+  env:
+    FORGANT_TOKEN: ${{ secrets.FORGANT_TOKEN }}
+  run: |
+    git config --global \
+      url."https://${FORGANT_TOKEN}@github.com/forgant-foundry/".insteadOf \
+      "https://github.com/forgant-foundry/"
+```
+
+Set `GOPRIVATE=github.com/forgant-foundry/*` and `GONOSUMDB=github.com/forgant-foundry/*` as environment variables on your build step. The release workflow in `.github/workflows/release.yml` already does this.
+
 ## Try it yourself
 
 ### Automated tests

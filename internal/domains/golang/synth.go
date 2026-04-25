@@ -13,8 +13,10 @@ import (
 )
 
 const (
-	defaultGoVersion = "1.25"
-	overlaySeqBase   = int64(1000)
+	defaultGoVersion   = "1.25"
+	overlaySeqBase     = int64(1000)
+	lambdaDepModule    = "github.com/aws/aws-lambda-go"
+	lambdaDepVersion   = "v1.54.0"
 )
 
 // Flat synthesizes a flat single-module Go project.
@@ -173,6 +175,244 @@ func (s *Workspace) Synthesize(dir string, aggregates map[string]*eventing.Aggre
 	}
 
 	return nil
+}
+
+// Lambda synthesizes a Go AWS Lambda project.
+// Managed files: go.mod
+type Lambda struct{}
+
+func NewLambda() *Lambda { return &Lambda{} }
+
+func (s *Lambda) InitializeEvents(name string) (map[string][]eventing.Event, error) {
+	events, err := makeEvents(1, []evtDef{
+		{"init", map[string]any{
+			"module": name,
+			"go":     defaultGoVersion,
+			"require": map[string]any{
+				lambdaDepModule: lambdaDepVersion,
+			},
+		}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return map[string][]eventing.Event{"go.mod": events}, nil
+}
+
+// OverlayEvents supports the same rc keys as Flat: module, go, require.
+func (s *Lambda) OverlayEvents(rc map[string]any) (map[string][]eventing.Event, error) {
+	return (&Flat{}).OverlayEvents(rc)
+}
+
+func (s *Lambda) Synthesize(dir string, aggregates map[string]*eventing.Aggregate) error {
+	if agg, ok := aggregates["go.mod"]; ok {
+		b, err := renderGoMod(agg)
+		if err != nil {
+			return fmt.Errorf("render go.mod: %w", err)
+		}
+		b = project.AddTextMarker(b, "//")
+		if err := project.WriteManaged(filepath.Join(dir, "go.mod"), b); err != nil {
+			return err
+		}
+	}
+
+	mainPath := filepath.Join(dir, "main.go")
+	if _, err := os.Stat(mainPath); os.IsNotExist(err) {
+		if err := os.WriteFile(mainPath, lambdaMainGo(), 0644); err != nil {
+			return err
+		}
+	}
+
+	makePath := filepath.Join(dir, "Makefile")
+	if _, err := os.Stat(makePath); os.IsNotExist(err) {
+		if err := os.WriteFile(makePath, lambdaMakefile(), 0644); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func lambdaMainGo() []byte {
+	// Cannot use raw string literal — struct tags contain backticks.
+	return []byte("package main\n\nimport (\n\t\"context\"\n\n\t\"github.com/aws/aws-lambda-go/lambda\"\n)\n\ntype Request struct {\n\tName string `json:\"name\"`\n}\n\ntype Response struct {\n\tMessage string `json:\"message\"`\n}\n\nfunc HandleRequest(_ context.Context, req Request) (Response, error) {\n\treturn Response{Message: \"Hello, \" + req.Name}, nil\n}\n\nfunc main() {\n\tlambda.Start(HandleRequest)\n}\n")
+}
+
+func lambdaMakefile() []byte {
+	return []byte(".PHONY: build\n\nbuild:\n\tGOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap main.go\n")
+}
+
+// KnativeFunc synthesizes a Knative func-style Go project.
+// Managed files: go.mod, func.yaml
+type KnativeFunc struct{}
+
+func NewKnativeFunc() *KnativeFunc { return &KnativeFunc{} }
+
+const (
+	knativeFuncSpecVersion = "0.35.0"
+	knativeFuncRuntime     = "go"
+)
+
+func (s *KnativeFunc) InitializeEvents(name string) (map[string][]eventing.Event, error) {
+	goModEvents, err := (&Flat{}).InitializeEvents(name)
+	if err != nil {
+		return nil, err
+	}
+
+	funcEvents, err := makeEvents(1, []evtDef{
+		{"init", map[string]any{
+			"specVersion": knativeFuncSpecVersion,
+			"name":        name,
+			"runtime":     knativeFuncRuntime,
+			"registry":    "",
+			"image":       "",
+		}},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string][]eventing.Event, len(goModEvents)+1)
+	for k, v := range goModEvents {
+		result[k] = v
+	}
+	result["func.yaml"] = funcEvents
+	return result, nil
+}
+
+// OverlayEvents supports go.mod keys (module, go, require) plus func.yaml keys:
+//
+//	name      string — overrides the function name in func.yaml
+//	registry  string — sets the container registry
+func (s *KnativeFunc) OverlayEvents(rc map[string]any) (map[string][]eventing.Event, error) {
+	result := map[string][]eventing.Event{}
+
+	goModOverlays, err := (&Flat{}).OverlayEvents(rc)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range goModOverlays {
+		result[k] = v
+	}
+
+	var defs []evtDef
+	if name, ok := rc["name"].(string); ok && name != "" {
+		defs = append(defs, evtDef{"name.set", map[string]any{"name": name}})
+	}
+	if registry, ok := rc["registry"].(string); ok && registry != "" {
+		defs = append(defs, evtDef{"registry.set", map[string]any{"registry": registry}})
+	}
+	if len(defs) > 0 {
+		funcEvents, err := makeEvents(overlaySeqBase, defs)
+		if err != nil {
+			return nil, err
+		}
+		result["func.yaml"] = funcEvents
+	}
+
+	if len(result) == 0 {
+		return nil, nil
+	}
+	return result, nil
+}
+
+func (s *KnativeFunc) Synthesize(dir string, aggregates map[string]*eventing.Aggregate) error {
+	if agg, ok := aggregates["go.mod"]; ok {
+		b, err := renderGoMod(agg)
+		if err != nil {
+			return fmt.Errorf("render go.mod: %w", err)
+		}
+		b = project.AddTextMarker(b, "//")
+		if err := project.WriteManaged(filepath.Join(dir, "go.mod"), b); err != nil {
+			return err
+		}
+	}
+
+	if agg, ok := aggregates["func.yaml"]; ok {
+		b, err := agg.ToYAML()
+		if err != nil {
+			return fmt.Errorf("render func.yaml: %w", err)
+		}
+		b = project.AddTextMarker(b, "#")
+		if err := project.WriteManaged(filepath.Join(dir, "func.yaml"), b); err != nil {
+			return err
+		}
+	}
+
+	for path, content := range map[string][]byte{
+		"handle.go":      knativeFuncHandleGo(),
+		"main.go":        knativeFuncMainGo(),
+		"handle_test.go": knativeFuncHandleTestGo(),
+	} {
+		if err := scaffoldFile(filepath.Join(dir, path), content); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func knativeFuncHandleGo() []byte {
+	return []byte(`package main
+
+import (
+	"fmt"
+	"net/http"
+)
+
+// Handle processes an incoming HTTP request.
+func Handle(res http.ResponseWriter, req *http.Request) {
+	fmt.Fprintln(res, "Hello, World!")
+}
+`)
+}
+
+func knativeFuncMainGo() []byte {
+	return []byte(`package main
+
+import (
+	"log"
+	"net/http"
+	"os"
+)
+
+func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	http.HandleFunc("/", Handle)
+	log.Printf("listening on :%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+`)
+}
+
+func knativeFuncHandleTestGo() []byte {
+	return []byte(`package main
+
+import (
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestHandle(t *testing.T) {
+	rec := httptest.NewRecorder()
+	Handle(rec, httptest.NewRequest("GET", "/", nil))
+	if !strings.Contains(rec.Body.String(), "Hello") {
+		t.Errorf("unexpected body: %q", rec.Body.String())
+	}
+}
+`)
+}
+
+// scaffoldFile writes content to path only if the file does not already exist.
+func scaffoldFile(path string, content []byte) error {
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	}
+	return os.WriteFile(path, content, 0644)
 }
 
 // renderGoMod renders a go.mod file from an aggregate.
