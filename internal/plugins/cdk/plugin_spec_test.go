@@ -3,8 +3,9 @@ package cdk_test
 // Spec tests for CDKPlugin.
 // All tests here are intentionally failing until the plugin is implemented.
 //
-// Model: per-function packages (npm workspaces + NodejsFunction per Lambda).
-// Register WorkspacesPlugin alongside CDKPlugin.
+// Model: per-function packages (NodejsFunction per Lambda).
+// CDKPlugin is monorepo-tool-agnostic: register with either WorkspacesPlugin
+// alone or WorkspacesPlugin + LernaPlugin.
 //
 // Certified against: aws-cdk-lib ^2.0.0 / constructs ^10.0.0 / esbuild ^0.25.0
 // node v22.14.0 / npm 11.7.0
@@ -19,6 +20,7 @@ import (
 	"github.com/forgant-foundry/eventing"
 	"github.com/forgant-foundry/forglet/internal/domains/node"
 	"github.com/forgant-foundry/forglet/internal/plugins/cdk"
+	"github.com/forgant-foundry/forglet/internal/plugins/lerna"
 	"github.com/forgant-foundry/forglet/internal/plugins/workspaces"
 	"github.com/forgant-foundry/forglet/internal/project"
 	"github.com/forgant-foundry/forglet/internal/testutil"
@@ -340,6 +342,80 @@ func TestCDKPlugin_Integration_NodeTS_ScaffoldNotTouchedOnResynth(t *testing.T) 
 	got, _ := os.ReadFile(binPath)
 	if string(got) != string(customContent) {
 		t.Error("bin/app.ts was modified by Synthesize; scaffold files must be immutable after Init")
+	}
+}
+
+// --- Integration with Lerna (workspaces + lerna + cdk) ---
+
+func cdkWithLernaProject(dir string) *project.Project {
+	return project.New(dir).WithPlugins(workspaces.New(), lerna.New(), cdk.New())
+}
+
+// TestCDKPlugin_Integration_WithLerna_CDKJSONExists verifies cdk.json is written
+// when CDKPlugin is combined with LernaPlugin.
+func TestCDKPlugin_Integration_WithLerna_CDKJSONExists(t *testing.T) {
+	dir := testutil.TempDir(t)
+	if err := cdkWithLernaProject(dir).Init(project.Meta{Name: "my-app", Template: "node-ts"}, node.NewTypeScript()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "cdk.json")); err != nil {
+		t.Errorf("cdk.json not written: %v", err)
+	}
+}
+
+// TestCDKPlugin_Integration_WithLerna_LernaJSONExists verifies lerna.json is
+// still written alongside cdk.json.
+func TestCDKPlugin_Integration_WithLerna_LernaJSONExists(t *testing.T) {
+	dir := testutil.TempDir(t)
+	if err := cdkWithLernaProject(dir).Init(project.Meta{Name: "my-app", Template: "node-ts"}, node.NewTypeScript()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "lerna.json")); err != nil {
+		t.Errorf("lerna.json not written: %v", err)
+	}
+}
+
+// TestCDKPlugin_Integration_WithLerna_PackageJSONHasBothDepSets verifies that
+// CDK deps and the lerna dep coexist in devDependencies.
+func TestCDKPlugin_Integration_WithLerna_PackageJSONHasBothDepSets(t *testing.T) {
+	dir := testutil.TempDir(t)
+	if err := cdkWithLernaProject(dir).Init(project.Meta{Name: "my-app", Template: "node-ts"}, node.NewTypeScript()); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pkg map[string]any
+	json.Unmarshal(b, &pkg)
+	devDeps, _ := pkg["devDependencies"].(map[string]any)
+	for dep, want := range map[string]string{
+		"aws-cdk-lib": cdkLibVersion,
+		"constructs":  constructsVersion,
+		"aws-cdk":     cdkCLIVersion,
+		"esbuild":     esbuildVersion,
+		"lerna":       "^9.0.0",
+	} {
+		if devDeps[dep] != want {
+			t.Errorf("devDependencies.%s = %v, want %q", dep, devDeps[dep], want)
+		}
+	}
+}
+
+// TestCDKPlugin_Integration_WithLerna_ScaffoldFilesExist verifies bin/app.ts
+// and lib/stack.ts are scaffolded regardless of which monorepo tool is used.
+func TestCDKPlugin_Integration_WithLerna_ScaffoldFilesExist(t *testing.T) {
+	dir := testutil.TempDir(t)
+	if err := cdkWithLernaProject(dir).Init(project.Meta{Name: "my-app", Template: "node-ts"}, node.NewTypeScript()); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		filepath.Join(dir, "bin", "app.ts"),
+		filepath.Join(dir, "lib", "stack.ts"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("%s not created: %v", path, err)
+		}
 	}
 }
 

@@ -11,13 +11,15 @@ import (
 	"github.com/forgant-foundry/forglet/internal/project"
 )
 
-// CDKPlugin adds AWS CDK support to any node template.
-// It manages package.json (CDK deps + scripts) and cdk.json via events,
-// and scaffolds bin/app.ts and lib/stack.ts once during Init.
+// CDKPlugin adds AWS CDK support to any node template using the per-function
+// Lambda pattern (NodejsFunction per workspace package). It manages package.json
+// (CDK deps + scripts) and cdk.json via events, and scaffolds bin/app.ts and
+// lib/stack.ts once during Init.
 //
-// Register WorkspacesPlugin alongside this plugin:
+// CDKPlugin is monorepo-tool-agnostic. Register it with either:
 //
-//	project.New(dir).WithPlugins(workspaces.New(), cdk.New())
+//	project.New(dir).WithPlugins(workspaces.New(), cdk.New())              // workspaces only
+//	project.New(dir).WithPlugins(workspaces.New(), lerna.New(), cdk.New()) // workspaces + lerna
 type CDKPlugin struct{}
 
 func New() *CDKPlugin { return &CDKPlugin{} }
