@@ -66,6 +66,7 @@ func (p *CDKPlugin) Weave(meta project.Meta, rc map[string]any, stream *project.
 	if err != nil {
 		return err
 	}
+	stream.SetFormat("cdk.json", project.FormatJSON)
 	stream.Append("cdk.json", eventing.Event{
 		ID:      newID(),
 		Type:    "cdk.configured",

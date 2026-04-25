@@ -65,7 +65,7 @@ type Synthesizer interface {
 }
 ```
 
-`Synthesize` receives the fully-merged aggregates and writes output files. Use `agg.ToJSON()` for JSON files.
+`Synthesize` receives the fully-merged aggregates and writes output files. Use `agg.ToJSON()` for JSON files, `agg.ToYAML()` for YAML files.
 
 ### Plugin Architecture
 
@@ -81,17 +81,70 @@ type Plugin interface {
 
 Platform engineers build a custom `main.go` that calls `commands.RegisterPlugin` before `commands.Execute`. The `cmd/forglet/commands/plugins.go` file holds the registered plugin slice; both `new` and `synth` commands pass it to `project.New(...).WithPlugins(registeredPlugins...)`.
 
+#### Optional Plugin Interfaces
+
+**`Scaffolder`** — plugins that need to write one-time files implement this alongside `Plugin`:
+
+```go
+type Scaffolder interface {
+    Scaffold(dir string, meta Meta) error
+}
+```
+
+`Scaffold` is called once during `Init`, after synthesis, and never during `Synthesize`. Implementations must be idempotent: check whether the file already exists before writing. Use this for files that belong to the developer (e.g. `bin/app.ts`, `Dockerfile`) — files that should never be overwritten once customised.
+
+### Plugin Awareness Hierarchy
+
+Contributors operate within a strict awareness hierarchy. Violating it creates coupling that makes the system brittle.
+
+| Layer | Aware of |
+|-------|----------|
+| **Plugin** | Project meta (`meta.Name`, `meta.Template`), rc config, EventStream contents (can inspect other plugins' contributions), other registered plugins |
+| **Domain (Synthesizer)** | Project meta and rc only |
+| **Project layer** | Neither domains nor plugins by name |
+
+Consequences:
+- A plugin can check `meta.Template` to behave differently per domain
+- A plugin can inspect `stream.Events()` to detect whether another plugin has already contributed to a file, and adjust accordingly (e.g. GitPlugin adding Knative-specific patterns when it detects Knative events)
+- A synthesizer never needs to change when a new plugin is added
+- The project layer never hardcodes plugin-owned filenames or formats
+
 ### Cross-Cutting Files
 
-Files that no single synthesizer owns — `.gitignore` is the canonical example — are handled by the project layer. After `BuildAggregates`, `Project.Synthesize` calls `renderCrossCuttingFiles`, which writes any aggregate whose filename is in `patternFiles` (defined in `project.go`) as a pattern-per-line text file.
+No contributor "owns" a cross-cutting file — any plugin, domain, or other contributor may write events to any file. The project layer is format-agnostic: it renders only what contributors declare on the stream.
 
-This means a plugin can append events to `.gitignore` and they will be rendered without any synthesizer knowing. Adding a new cross-cutting pattern file requires only adding its name to `patternFiles`.
+**How it works:**
 
-The `internal/plugins/git` package is the reference implementation: `GitPlugin.Weave` checks `rc["git"].(bool)`, looks up patterns by `meta.Template`, and appends them to the `.gitignore` stream. Adding support for a new template is a single entry in the `patterns` map.
+A contributor calls `stream.SetFormat(filename, format)` alongside its `stream.Append` calls. After all `Weave` calls, `Project.Synthesize` reads `stream.Formats()` and renders each aggregate that has a registered format.
+
+```go
+func (p *MyPlugin) Weave(meta project.Meta, rc map[string]any, stream *project.EventStream) error {
+    stream.SetFormat(".gitignore", project.FormatPattern)
+    stream.Append(".gitignore", eventing.Event{ /* patterns */ })
+
+    stream.SetFormat("config.json", project.FormatJSON)
+    stream.Append("config.json", eventing.Event{ /* config */ })
+    return nil
+}
+```
+
+**Supported formats:**
+
+| Constant | Rendered as |
+|----------|-------------|
+| `project.FormatPattern` | One active key per line, `#` managed comment header |
+| `project.FormatJSON` | Pretty-printed JSON object, `//` managed comment key |
+| `project.FormatYAML` | YAML document, `#` managed comment header |
+
+`SetFormat` is last-write-wins. Multiple contributors may call it for the same file; since they must agree on the format (a file is either JSON or YAML, not both), conflicts indicate a design error and will surface in tests.
+
+Adding a new cross-cutting file requires **no changes to `project.go`** — just `SetFormat` + `Append` in any contributor.
+
+The `internal/plugins/git` package is the reference for a conditional pattern file: `GitPlugin.Weave` checks `rc["git"].(bool)` before contributing, so no `.gitignore` aggregate is built when git is disabled and the file is simply not written.
 
 ### EventStream (plugin weaving)
 
-`EventStream` in `internal/project/stream.go` wraps `map[string][]eventing.Event` with positional manipulation. This gives plugins full control over event order, not just append rights. After all mutations, `Events()` re-normalises seq numbers (position 0 → seq 1) to avoid conflicts.
+`EventStream` in `internal/project/stream.go` wraps per-file event sequences with positional manipulation and format registration. Plugins have full control over event order, not just append rights. After all mutations, `Events()` re-normalises seq numbers (position 0 → seq 1).
 
 | Method | Behaviour |
 |--------|-----------|
@@ -100,6 +153,7 @@ The `internal/plugins/git` package is the reference implementation: `GitPlugin.W
 | `InsertBefore(file, type, events...)` | Before first match; prepend if no match |
 | `Replace(file, type, events...)` | Remove all of type, insert at first match position |
 | `Remove(file, type)` | Remove all events of that type |
+| `SetFormat(file, format)` | Register render format for a cross-cutting file |
 
 ### `.forglet.yml` — Template-Aware Configuration
 
@@ -118,16 +172,20 @@ scripts:                # node-ts: adds to package.json scripts
 git: true               # GitPlugin: creates .gitignore with template-appropriate patterns
 ```
 
-Template-aware keys are synthesizer-specific — `OverlayEvents(rc)` translates them into events for the right files. Cross-cutting keys are owned by plugins; adding a new cross-cutting behaviour never requires touching a synthesizer. The RC overlay always wins over both template and plugin layers.
+Template-aware keys are synthesizer-specific — `OverlayEvents(rc)` translates them into events for the right files. Cross-cutting keys are read by plugins; adding a new cross-cutting behaviour never requires touching a synthesizer. The RC overlay always wins over both template and plugin layers.
 
 ### Module Structure
 
 Single `go.mod` at the root (`github.com/forgant-foundry/forglet`):
 - `cmd/forglet/` — CLI entry point (Cobra); `commands/new.go` maps template names to synthesizers; `commands/plugins.go` holds `RegisterPlugin`
-- `internal/project/` — `Project` type, `Synthesizer` and `Plugin` interfaces, `EventStream`, aggregate merge logic, cross-cutting file rendering
-- `internal/domains/node/` — `node-ts` synthesizer (`package.json`, `tsconfig.json`, `src/index.ts` scaffold)
+- `internal/project/` — `Project` type, `Synthesizer`/`Plugin`/`Scaffolder` interfaces, `EventStream` (with `SetFormat`), aggregate merge logic, cross-cutting file rendering
+- `internal/domains/node/` — `node-ts` and `node-js` synthesizers (`package.json`, `tsconfig.json`, `src/index.ts` / `index.js` scaffolds)
 - `internal/domains/golang/` — `go` and `go-workspace` synthesizers (`go.mod` / `go.work`, module scaffolds)
-- `internal/plugins/git/` — `GitPlugin`: cross-cutting `.gitignore` support driven by `meta.Template` + `rc["git"]`
+- `internal/plugins/git/` — cross-cutting `.gitignore` support, driven by `meta.Template` + `rc["git"]`
+- `internal/plugins/workspaces/` — npm workspaces (`private: true`, `workspaces: ["packages/*"]`)
+- `internal/plugins/lerna/` — Lerna monorepo (`lerna.json` via `FormatJSON`, `lerna` devDependency)
+- `internal/plugins/cdk/` — AWS CDK (`cdk.json` via `FormatJSON`, CDK devDependencies, scaffolds `bin/app.ts` + `lib/stack.ts`)
+- `internal/plugins/knative/` — Knative Serving (`.knative/service.yaml` via `FormatYAML`, `.dockerignore` via `FormatPattern`, scaffolds `Dockerfile`)
 - `internal/testutil/` — shared `TempDir` helper
 
 ### Testing Conventions
@@ -144,3 +202,13 @@ Test layers:
 1. Add a package under `internal/domains/<name>/`
 2. Implement `project.Synthesizer` (all three methods); use `makeEvents`-style pattern with `json.RawMessage` payloads
 3. Register the template name in `cmd/forglet/commands/new.go`
+
+### Adding a New Plugin
+
+1. Add a package under `internal/plugins/<name>/`
+2. Implement `project.Plugin` (`Weave` method)
+3. For each cross-cutting file the plugin contributes to, call `stream.SetFormat(filename, format)` alongside `stream.Append` — do not add filenames to `project.go`
+4. Optionally implement `project.Scaffolder` (`Scaffold` method) for one-time files
+5. Register via `commands.RegisterPlugin` in the custom `main.go`
+
+The plugin must not assume it is the only contributor to any file. Check `meta.Template` for domain-awareness and inspect `stream.Events()` for plugin-awareness.

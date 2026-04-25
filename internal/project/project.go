@@ -42,6 +42,15 @@ type Plugin interface {
 	Weave(meta Meta, rc map[string]any, stream *EventStream) error
 }
 
+// FileFormat describes how a cross-cutting file's aggregate should be rendered.
+type FileFormat int
+
+const (
+	FormatPattern FileFormat = iota // one active key per line, # managed comment
+	FormatJSON                      // pretty-printed JSON object with // managed comment key
+	FormatYAML                      // YAML document with # managed comment
+)
+
 // Scaffolder is an optional interface that plugins implement to write one-time
 // scaffold files (e.g. bin/app.ts, lib/stack.ts). Scaffold is called once
 // during Init, after synthesis, and never during re-synth. Implementations
@@ -133,10 +142,7 @@ func (p *Project) Synthesize(s Synthesizer) error {
 			return err
 		}
 	}
-	if err := p.renderCrossCuttingFiles(aggregates); err != nil {
-		return err
-	}
-	if err := p.renderJSONCrossCuttingFiles(aggregates); err != nil {
+	if err := p.renderAllCrossCuttingFiles(aggregates, stream.Formats()); err != nil {
 		return err
 	}
 	if err := s.Synthesize(p.root, aggregates); err != nil {
@@ -274,46 +280,35 @@ func (p *Project) loadRC() (map[string]any, error) {
 	return rc, yaml.Unmarshal(b, &rc)
 }
 
-// renderCrossCuttingFiles writes files that plugins may contribute to regardless
-// of which synthesizer is active. These files use a "keys as lines" model —
-// each active top-level node name is written as one line (sorted alphabetically).
-// New cross-cutting files can be added to patternFiles as needed.
-func (p *Project) renderCrossCuttingFiles(aggregates map[string]*eventing.Aggregate) error {
-	for _, filename := range patternFiles {
+// renderAllCrossCuttingFiles renders each file whose format was registered on
+// the EventStream during the weave pass. Any contributor may register a format
+// via stream.SetFormat — there is no ownership.
+func (p *Project) renderAllCrossCuttingFiles(aggregates map[string]*eventing.Aggregate, formats map[string]FileFormat) error {
+	for filename, format := range formats {
 		agg, ok := aggregates[filename]
 		if !ok {
 			continue
 		}
-		var buf bytes.Buffer
-		for _, n := range agg.Value {
-			if n.Status == eventing.NodeActive {
-				fmt.Fprintf(&buf, "%s\n", n.Name)
-			}
-		}
-		content := AddTextMarker(buf.Bytes(), "#")
-		if err := WriteManaged(filepath.Join(p.root, filename), content); err != nil {
+		if err := p.renderCrossCuttingFile(filename, format, agg); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// patternFiles are cross-cutting files whose content is derived entirely from
-// top-level node names in the aggregate — one pattern per line, alphabetical.
-var patternFiles = []string{".gitignore"}
-
-// jsonCrossCuttingFiles are cross-cutting files rendered as pretty-printed JSON
-// from their aggregate. Plugins contribute to these via the EventStream; no
-// synthesizer needs to know they exist.
-var jsonCrossCuttingFiles = []string{"cdk.json", "lerna.json"}
-
-// renderJSONCrossCuttingFiles writes JSON cross-cutting files from their aggregates.
-func (p *Project) renderJSONCrossCuttingFiles(aggregates map[string]*eventing.Aggregate) error {
-	for _, filename := range jsonCrossCuttingFiles {
-		agg, ok := aggregates[filename]
-		if !ok {
-			continue
+// renderCrossCuttingFile renders a single aggregate to disk using the given format.
+func (p *Project) renderCrossCuttingFile(filename string, format FileFormat, agg *eventing.Aggregate) error {
+	var content []byte
+	switch format {
+	case FormatPattern:
+		var buf bytes.Buffer
+		for _, n := range agg.Value {
+			if n.Status == eventing.NodeActive {
+				fmt.Fprintf(&buf, "%s\n", n.Name)
+			}
 		}
+		content = AddTextMarker(buf.Bytes(), "#")
+	case FormatJSON:
 		raw, err := agg.ToJSON()
 		if err != nil {
 			return fmt.Errorf("serialize %s: %w", filename, err)
@@ -326,12 +321,20 @@ func (p *Project) renderJSONCrossCuttingFiles(aggregates map[string]*eventing.Ag
 		if err != nil {
 			return fmt.Errorf("indent %s: %w", filename, err)
 		}
-		b = AddJSONMarker(b)
-		if err := WriteManaged(filepath.Join(p.root, filename), b); err != nil {
-			return err
+		content = AddJSONMarker(b)
+	case FormatYAML:
+		raw, err := agg.ToYAML()
+		if err != nil {
+			return fmt.Errorf("serialize %s: %w", filename, err)
 		}
+		content = AddTextMarker(raw, "#")
+	default:
+		return fmt.Errorf("unknown file format %d for %s", format, filename)
 	}
-	return nil
+	if err := os.MkdirAll(filepath.Join(p.root, filepath.Dir(filename)), 0755); err != nil {
+		return err
+	}
+	return WriteManaged(filepath.Join(p.root, filename), content)
 }
 
 // saveAggregate writes the aggregate snapshot to .forglet/<filename>.json.
@@ -340,5 +343,9 @@ func (p *Project) saveAggregate(filename string, agg *eventing.Aggregate) error 
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(p.root, forgletDir, filename+".json"), b, 0644)
+	dest := filepath.Join(p.root, forgletDir, filename+".json")
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(dest, b, 0644)
 }

@@ -6,8 +6,13 @@ import "github.com/forgant-foundry/eventing"
 // into aggregates during synthesis. Position in each file's slice determines
 // apply order — seq numbers are re-normalized on Events() so plugins never need
 // to manage them.
+//
+// Contributors that write to cross-cutting files (files not owned by the active
+// synthesizer) also call SetFormat to register how the file should be rendered.
+// Any contributor may call SetFormat for any file — there is no ownership.
 type EventStream struct {
-	files map[string][]eventing.Event
+	files   map[string][]eventing.Event
+	formats map[string]FileFormat
 }
 
 // NewEventStream creates an EventStream from a per-file event map.
@@ -20,7 +25,23 @@ func NewEventStream(events map[string][]eventing.Event) *EventStream {
 		copy(cp, evts)
 		files[file] = cp
 	}
-	return &EventStream{files: files}
+	return &EventStream{files: files, formats: map[string]FileFormat{}}
+}
+
+// SetFormat registers the render format for a cross-cutting file. Call this
+// alongside any Append to a file that the active synthesizer does not manage.
+// Multiple contributors may call SetFormat for the same file; the last call wins.
+func (s *EventStream) SetFormat(file string, format FileFormat) {
+	s.formats[file] = format
+}
+
+// Formats returns the registered render formats keyed by filename.
+func (s *EventStream) Formats() map[string]FileFormat {
+	out := make(map[string]FileFormat, len(s.formats))
+	for k, v := range s.formats {
+		out[k] = v
+	}
+	return out
 }
 
 // Append adds events to the end of the named file's stream.

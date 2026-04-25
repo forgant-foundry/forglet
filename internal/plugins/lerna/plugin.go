@@ -43,6 +43,7 @@ func (p *LernaPlugin) Weave(meta project.Meta, rc map[string]any, stream *projec
 	if err != nil {
 		return err
 	}
+	stream.SetFormat("lerna.json", project.FormatJSON)
 	stream.Append("lerna.json", eventing.Event{
 		ID:      newID(),
 		Type:    "lerna.configured",

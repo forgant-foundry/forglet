@@ -43,6 +43,7 @@ func (p *Plugin) Weave(meta project.Meta, rc map[string]any, stream *project.Eve
 		return fmt.Errorf("git plugin: marshal payload: %w", err)
 	}
 
+	stream.SetFormat(".gitignore", project.FormatPattern)
 	stream.Append(".gitignore", eventing.Event{
 		ID:      newID(),
 		Type:    "git.ignore",
