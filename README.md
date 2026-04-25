@@ -188,6 +188,7 @@ go test ./...
 go test ./internal/project/
 go test ./internal/domains/node/
 go test ./internal/domains/golang/
+go test ./internal/domains/java/
 go test ./internal/plugins/git/
 
 # Run a single test by name
@@ -257,10 +258,18 @@ When you're done, `rm -rf .scratch` wipes every scratch project in one go. `.scr
 
 ## Templates
 
-| Template       | Managed files                        | Scaffolded (once)              |
-|----------------|--------------------------------------|--------------------------------|
-| `node-ts`      | `package.json`, `tsconfig.json`      | `src/index.ts`                 |
-| `go`           | `go.mod`                             | `main.go`                      |
-| `go-workspace` | `go.work`                            | `<name>/go.mod`, `<name>/main.go` |
+| Template            | Managed files                     | Scaffolded (once)                                           |
+|---------------------|-----------------------------------|-------------------------------------------------------------|
+| `go`                | `go.mod`                          | `main.go`                                                   |
+| `go-workspace`      | `go.work`                         | `<name>/go.mod`, `<name>/main.go`                           |
+| `go-lambda`         | `go.mod`, `Makefile`              | `main.go`                                                   |
+| `go-knative`        | `go.mod`, `func.yaml`             | `handle.go`, `main.go`, `handle_test.go`                    |
+| `java`              | `pom.xml`                         | `App.java`, `AppTest.java`                                  |
+| `java-multimodule`  | `pom.xml`                         | `<module>/pom.xml`, `<module>/src/{main,test}/java/…`       |
+| `java-lambda`       | `pom.xml`                         | `Handler.java`, `HandlerTest.java`                          |
+| `java-spring`       | `pom.xml`                         | `Application.java`, `HelloController.java`, `application.properties`, `ApplicationTest.java` |
+| `node-ts`           | `package.json`, `tsconfig.json`   | `src/index.ts`                                              |
+| `node-js`           | `package.json`                    | `src/index.js`                                              |
+| `node-lambda`       | `package.json`, `tsconfig.json`   | `packages/handler/index.ts`, `packages/handler/package.json` |
 
 Cross-cutting files (e.g. `.gitignore`) are managed by plugins, not by synthesizers, and work across all templates.
