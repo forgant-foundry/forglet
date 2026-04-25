@@ -34,7 +34,7 @@ var newCmd = &cobra.Command{
 			return err
 		}
 
-		p := project.New(dir).WithPlugins(registeredPlugins...)
+		p := project.New(dir).WithPlugins(registeredPlugins...).WithValidators(registeredValidators...)
 		if err := p.Init(project.Meta{Name: name, Template: template}, s); err != nil {
 			return err
 		}

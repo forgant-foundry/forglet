@@ -11,7 +11,7 @@ var synthCmd = &cobra.Command{
 	Use:   "synth",
 	Short: "Regenerate project files from the event log",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		p := project.New(".").WithPlugins(registeredPlugins...)
+		p := project.New(".").WithPlugins(registeredPlugins...).WithValidators(registeredValidators...)
 		meta, err := p.LoadMeta()
 		if err != nil {
 			return err

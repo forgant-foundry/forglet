@@ -30,13 +30,15 @@ func (s *TypeScript) InitializeEvents(name string) (map[string][]eventing.Event,
 		}},
 		{"scripts.added", map[string]any{
 			"scripts": map[string]any{
-				"build": "tsc",
-				"start": "node dist/index.js",
+				"build":       "tsc",
+				"start":       "node dist/index.js",
+				"postinstall": "allow-scripts",
 			},
 		}},
 		{"devDependency.added", map[string]any{
 			"devDependencies": map[string]any{
-				"typescript": "^5.0.0",
+				"typescript":              "^5.0.0",
+				"@lavamoat/allow-scripts": "^3.3.1",
 			},
 		}},
 	})
@@ -87,6 +89,11 @@ func (s *TypeScript) OverlayEvents(rc map[string]any) (map[string][]eventing.Eve
 	}
 	if scripts, ok := asStringMap(rc["scripts"]); ok {
 		defs = append(defs, evtDef{"scripts.added", map[string]any{"scripts": scripts}})
+	}
+	if allowScripts, ok := asBoolMap(rc["allowScripts"]); ok {
+		defs = append(defs, evtDef{"allowScripts.configured", map[string]any{
+			"lavamoat": map[string]any{"allowScripts": allowScripts},
+		}})
 	}
 
 	if len(defs) == 0 {
@@ -178,6 +185,23 @@ func asStringMap(v any) (map[string]string, bool) {
 			continue
 		}
 		out[k] = s
+	}
+	return out, len(out) > 0
+}
+
+// asBoolMap coerces a yaml-parsed value into map[string]bool.
+func asBoolMap(v any) (map[string]bool, bool) {
+	raw, ok := v.(map[string]any)
+	if !ok || len(raw) == 0 {
+		return nil, false
+	}
+	out := make(map[string]bool, len(raw))
+	for k, val := range raw {
+		b, ok := val.(bool)
+		if !ok {
+			continue
+		}
+		out[k] = b
 	}
 	return out, len(out) > 0
 }

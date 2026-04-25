@@ -136,14 +136,86 @@ func main() {
 
 Build and distribute this binary to your engineers in place of the vanilla `forglet` binary. All `forglet new` and `forglet synth` invocations will then include the plugin's events automatically.
 
-## Build
+## Try it yourself
+
+### Automated tests
+
+The test suite covers every layer — synthesizer unit tests, `EventStream` operations, aggregate merge provenance, and full `Init` → `Synthesize` integration runs.
 
 ```bash
-go build -o forglet ./cmd/forglet
+# Run everything
 go test ./...
+
+# Run a single package
+go test ./internal/project/
+go test ./internal/domains/node/
+go test ./internal/domains/golang/
+go test ./internal/plugins/git/
+
+# Run a single test by name
+go test -run TestSynthesizeIsIdempotent ./internal/project/
+
+# Keep the temp directories that filesystem tests create so you can inspect
+# the generated files and .forglet/*.json aggregate snapshots
+FORGLET_KEEP_TEMP=1 go test -v ./internal/project/
 ```
 
-Set `FORGLET_KEEP_TEMP=1` when running tests to preserve temp directories for inspection.
+Integration tests use `testutil.TempDir(t)`, which prints the preserved path when `FORGLET_KEEP_TEMP=1` is set — follow that path to see exactly what the synthesizer wrote.
+
+### Driving the CLI by hand
+
+The fastest way to feel the three-layer model is to build the binary and run it against a throwaway directory inside the repo:
+
+```bash
+# 1. Build the binary at the repo root
+go build -o forglet ./cmd/forglet
+
+# 2. Create a scratch workspace that git will ignore
+mkdir -p .scratch && cd .scratch
+
+# 3. Create a new project from a template
+../forglet new node-ts hello
+
+# 4. Inspect what was generated
+cd hello
+ls -la
+cat package.json
+cat .forglet/project.json           # records template + project name
+cat .forglet/package.json.json      # aggregate snapshot with per-field provenance
+```
+
+Every field in `.forglet/package.json.json` carries an `EventType`, `EventID`, and `Seq` identifying which layer last set it — this is the clearest way to see the three-layer model in action.
+
+Now exercise the RC overlay and re-synth:
+
+```bash
+# Still in .scratch/hello
+cat > .forglet.yml <<'YAML'
+devDependencies:
+  prettier: "^3.0.0"
+scripts:
+  format: "prettier --write ."
+git: true
+YAML
+
+../../forglet synth
+
+cat package.json                    # prettier + format script now present
+cat .gitignore                      # GitPlugin wrote node-ts patterns
+cat .forglet/package.json.json      # prettier's provenance is the rc overlay
+```
+
+Because all three layers re-derive on every synth, editing `.forglet.yml` and re-running `forglet synth` is the full update loop — there is no event log to migrate.
+
+Try the other templates the same way:
+
+```bash
+cd ../..              # back to .scratch
+../forglet new go my-go-app
+../forglet new go-workspace my-workspace
+```
+
+When you're done, `rm -rf .scratch` wipes every scratch project in one go. `.scratch/` is just a convention — it is not special-cased by forglet, so add it to your local `.git/info/exclude` if you want git to ignore it.
 
 ## Templates
 

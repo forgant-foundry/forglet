@@ -44,8 +44,9 @@ type Plugin interface {
 
 // Project manages a forglet project rooted at a directory.
 type Project struct {
-	root    string
-	plugins []Plugin
+	root       string
+	plugins    []Plugin
+	validators []Validator
 }
 
 func New(root string) *Project {
@@ -55,6 +56,12 @@ func New(root string) *Project {
 // WithPlugins registers plugins to be applied during synthesis.
 func (p *Project) WithPlugins(plugins ...Plugin) *Project {
 	p.plugins = append(p.plugins, plugins...)
+	return p
+}
+
+// WithValidators registers validators that run after synthesis to assert policy.
+func (p *Project) WithValidators(validators ...Validator) *Project {
+	p.validators = append(p.validators, validators...)
 	return p
 }
 
@@ -109,7 +116,10 @@ func (p *Project) Synthesize(s Synthesizer) error {
 	if err := p.renderCrossCuttingFiles(aggregates); err != nil {
 		return err
 	}
-	return s.Synthesize(p.root, aggregates)
+	if err := s.Synthesize(p.root, aggregates); err != nil {
+		return err
+	}
+	return p.runValidators(meta, rc)
 }
 
 // BuildAggregates builds per-file aggregates by sequentially deep-merging N

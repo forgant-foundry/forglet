@@ -299,6 +299,108 @@ func TestTypeScript_Synthesize_PackageJSONHasMarker(t *testing.T) {
 	}
 }
 
+// TestTypeScript_InitializeEvents_AllowScriptsDevDep checks @lavamoat/allow-scripts is in devDependencies.
+func TestTypeScript_InitializeEvents_AllowScriptsDevDep(t *testing.T) {
+	s := node.NewTypeScript()
+	files, err := s.InitializeEvents("my-app")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	agg := buildAgg(t, files["package.json"])
+	b, err := agg.ToJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pkg map[string]any
+	json.Unmarshal(b, &pkg)
+
+	devDeps, _ := pkg["devDependencies"].(map[string]any)
+	if devDeps["@lavamoat/allow-scripts"] == nil {
+		t.Error("@lavamoat/allow-scripts not in devDependencies")
+	}
+}
+
+// TestTypeScript_InitializeEvents_PostinstallScript checks postinstall is set to "allow-scripts".
+func TestTypeScript_InitializeEvents_PostinstallScript(t *testing.T) {
+	s := node.NewTypeScript()
+	files, err := s.InitializeEvents("my-app")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	agg := buildAgg(t, files["package.json"])
+	b, _ := agg.ToJSON()
+	var pkg map[string]any
+	json.Unmarshal(b, &pkg)
+
+	scripts, _ := pkg["scripts"].(map[string]any)
+	if scripts["postinstall"] != "allow-scripts" {
+		t.Errorf("scripts.postinstall = %v, want %q", scripts["postinstall"], "allow-scripts")
+	}
+}
+
+// TestTypeScript_OverlayEvents_AllowScripts checks allowScripts from rc maps to lavamoat.allowScripts.
+func TestTypeScript_OverlayEvents_AllowScripts(t *testing.T) {
+	s := node.NewTypeScript()
+	rc := map[string]any{
+		"allowScripts": map[string]any{
+			"esbuild": true,
+			"husky":   false,
+		},
+	}
+	files, err := s.OverlayEvents(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, ok := files["package.json"]
+	if !ok {
+		t.Fatal("expected overlay events for package.json")
+	}
+
+	found := false
+	for _, e := range events {
+		if e.Type != "allowScripts.configured" {
+			continue
+		}
+		var payload map[string]any
+		json.Unmarshal(e.Payload, &payload)
+		lavamoat, _ := payload["lavamoat"].(map[string]any)
+		allowScripts, _ := lavamoat["allowScripts"].(map[string]any)
+		if allowScripts["esbuild"] == true {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("lavamoat.allowScripts.esbuild not found in allowScripts.configured overlay event")
+	}
+}
+
+// TestTypeScript_Synthesize_AllowScriptsInPackageJSON checks the synthesized file has allow-scripts configured.
+func TestTypeScript_Synthesize_AllowScriptsInPackageJSON(t *testing.T) {
+	dir := testutil.TempDir(t)
+	s := node.NewTypeScript()
+
+	fileEvents, _ := s.InitializeEvents("my-app")
+	aggregates := project.BuildAggregates(fileEvents, nil)
+	if err := s.Synthesize(dir, aggregates); err != nil {
+		t.Fatal(err)
+	}
+
+	b, _ := os.ReadFile(filepath.Join(dir, "package.json"))
+	var pkg map[string]any
+	json.Unmarshal(b, &pkg)
+
+	devDeps, _ := pkg["devDependencies"].(map[string]any)
+	if devDeps["@lavamoat/allow-scripts"] == nil {
+		t.Error("@lavamoat/allow-scripts not in synthesized devDependencies")
+	}
+	scripts, _ := pkg["scripts"].(map[string]any)
+	if scripts["postinstall"] != "allow-scripts" {
+		t.Errorf("scripts.postinstall = %v, want %q", scripts["postinstall"], "allow-scripts")
+	}
+}
+
 // TestTypeScript_Synthesize_IndexTsNotOverwritten checks the scaffold file is preserved.
 func TestTypeScript_Synthesize_IndexTsNotOverwritten(t *testing.T) {
 	dir := testutil.TempDir(t)
