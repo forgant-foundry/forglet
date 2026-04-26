@@ -24,6 +24,64 @@ func (s *noopSynth) OverlayEvents(_ map[string]any) (map[string][]eventing.Event
 }
 func (s *noopSynth) Synthesize(_ string, _ map[string]*eventing.Aggregate) error { return nil }
 
+// ---- System categories -----------------------------------------------------------
+
+func TestGitPlugin_SystemCategories_AlwaysPresent(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\n")
+
+	if err := p.Init(project.Meta{Name: "my-app", Template: "node-ts"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	for _, want := range []string{".forglet/", ".DS_Store", ".idea/", ".vscode/", ".classpath"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected system pattern %q in .gitignore:\n%s", want, content)
+		}
+	}
+}
+
+func TestGitPlugin_ExcludeCategory(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\ngitignore:\n  exclude:\n    - eclipse\n    - vscode\n")
+
+	if err := p.Init(project.Meta{Name: "my-app", Template: "node-ts"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	if strings.Contains(content, ".classpath") {
+		t.Error("eclipse category should be excluded")
+	}
+	if strings.Contains(content, ".vscode/") {
+		t.Error("vscode category should be excluded")
+	}
+	// other system categories still present
+	if !strings.Contains(content, ".DS_Store") {
+		t.Error("macos category should still be present")
+	}
+	if !strings.Contains(content, ".idea/") {
+		t.Error("jetbrains category should still be present")
+	}
+}
+
+func TestGitPlugin_ForgletCategoryAlwaysPresent(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	if !strings.Contains(content, ".forglet/") {
+		t.Errorf(".forglet/ not found in .gitignore:\n%s", content)
+	}
+}
+
+// ---- Template-specific patterns -------------------------------------------------
+
 func TestGitPlugin_NodeTs_CreatesGitignore(t *testing.T) {
 	dir, p := setup(t)
 	writeRC(t, dir, "git: true\n")
@@ -33,7 +91,7 @@ func TestGitPlugin_NodeTs_CreatesGitignore(t *testing.T) {
 	}
 
 	content := readFile(t, filepath.Join(dir, ".gitignore"))
-	for _, want := range []string{"node_modules/", "dist/", ".env", ".DS_Store"} {
+	for _, want := range []string{"node_modules/", "dist/", ".env"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("expected %q in .gitignore:\n%s", want, content)
 		}
@@ -49,7 +107,7 @@ func TestGitPlugin_NodeJs_CreatesGitignore(t *testing.T) {
 	}
 
 	content := readFile(t, filepath.Join(dir, ".gitignore"))
-	for _, want := range []string{"node_modules/", ".env", ".DS_Store"} {
+	for _, want := range []string{"node_modules/", ".env"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("expected %q in .gitignore:\n%s", want, content)
 		}
@@ -84,7 +142,7 @@ func TestGitPlugin_Go_CreatesGitignore(t *testing.T) {
 	}
 
 	content := readFile(t, filepath.Join(dir, ".gitignore"))
-	for _, want := range []string{"*.exe", "*.out", "*.test", "coverage.out", ".DS_Store", ".forglet/"} {
+	for _, want := range []string{"*.exe", "*.out", "*.test", "coverage.out", ".forglet/"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("expected %q in .gitignore:\n%s", want, content)
 		}
@@ -148,7 +206,7 @@ func TestGitPlugin_Java_CreatesGitignore(t *testing.T) {
 	}
 
 	content := readFile(t, filepath.Join(dir, ".gitignore"))
-	for _, want := range []string{"target/", "*.class", ".idea/", "*.iml", ".DS_Store"} {
+	for _, want := range []string{"target/", "*.class", ".idea/"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("expected %q in .gitignore:\n%s", want, content)
 		}
@@ -203,7 +261,25 @@ func TestGitPlugin_JavaSpring_CreatesGitignore(t *testing.T) {
 	}
 }
 
-func TestGitPlugin_CustomPatterns(t *testing.T) {
+// ---- Custom patterns -----------------------------------------------------------
+
+func TestGitPlugin_AddPatterns_MapForm(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\ngitignore:\n  add:\n    - \".env.local\"\n    - \"secrets.json\"\n")
+
+	if err := p.Init(project.Meta{Name: "my-app", Template: "node-ts"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	for _, want := range []string{"node_modules/", ".env.local", "secrets.json"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected %q in .gitignore:\n%s", want, content)
+		}
+	}
+}
+
+func TestGitPlugin_CustomPatterns_FlatListBackwardCompat(t *testing.T) {
 	dir, p := setup(t)
 	writeRC(t, dir, "git: true\ngitignore:\n  - \".env.local\"\n  - \"secrets.json\"\n")
 
@@ -231,6 +307,8 @@ func TestGitPlugin_CustomPatterns_OnlyWhenGitEnabled(t *testing.T) {
 		t.Error("expected no .gitignore when git key absent")
 	}
 }
+
+// ---- Disabled / absent ---------------------------------------------------------
 
 func TestGitPlugin_NoGitKey_NoGitignore(t *testing.T) {
 	dir, p := setup(t)
@@ -269,6 +347,8 @@ func TestGitPlugin_UnknownTemplate_Noop(t *testing.T) {
 		t.Error("expected no .gitignore for unknown template")
 	}
 }
+
+// ---- Managed file properties ---------------------------------------------------
 
 func TestGitPlugin_GitignoreReadOnly(t *testing.T) {
 	dir, p := setup(t)
