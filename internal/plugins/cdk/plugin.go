@@ -74,6 +74,23 @@ func (p *CDKPlugin) Weave(meta project.Meta, rc map[string]any, stream *project.
 		Payload: json.RawMessage(cdkPayload),
 	})
 
+	if enabled, _ := rc["git"].(bool); enabled {
+		ignorePayload, err := json.Marshal(map[string]any{
+			"cdk.out/":      "",
+			".cdk.staging/": "",
+		})
+		if err != nil {
+			return err
+		}
+		stream.SetFormat(".gitignore", project.FormatPattern)
+		stream.Append(".gitignore", eventing.Event{
+			ID:      newID(),
+			Type:    "git.ignore",
+			Seq:     1,
+			Payload: json.RawMessage(ignorePayload),
+		})
+	}
+
 	return nil
 }
 

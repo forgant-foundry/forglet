@@ -33,6 +33,41 @@ func TestGitPlugin_NodeTs_CreatesGitignore(t *testing.T) {
 	}
 
 	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	for _, want := range []string{"node_modules/", "dist/", ".env", ".DS_Store"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected %q in .gitignore:\n%s", want, content)
+		}
+	}
+}
+
+func TestGitPlugin_NodeJs_CreatesGitignore(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\n")
+
+	if err := p.Init(project.Meta{Name: "my-app", Template: "node-js"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	for _, want := range []string{"node_modules/", ".env", ".DS_Store"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected %q in .gitignore:\n%s", want, content)
+		}
+	}
+	if strings.Contains(content, "dist/") {
+		t.Error("node-js .gitignore should not contain dist/")
+	}
+}
+
+func TestGitPlugin_NodeLambda_CreatesGitignore(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\n")
+
+	if err := p.Init(project.Meta{Name: "my-handler", Template: "node-lambda"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
 	for _, want := range []string{"node_modules/", "dist/", ".env"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("expected %q in .gitignore:\n%s", want, content)
@@ -49,7 +84,7 @@ func TestGitPlugin_Go_CreatesGitignore(t *testing.T) {
 	}
 
 	content := readFile(t, filepath.Join(dir, ".gitignore"))
-	for _, want := range []string{"*.exe", "*.out", "*.test"} {
+	for _, want := range []string{"*.exe", "*.out", "*.test", "coverage.out", ".DS_Store"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("expected %q in .gitignore:\n%s", want, content)
 		}
@@ -65,10 +100,135 @@ func TestGitPlugin_GoWorkspace_CreatesGitignore(t *testing.T) {
 	}
 
 	content := readFile(t, filepath.Join(dir, ".gitignore"))
-	for _, want := range []string{"*.exe", "*.out", "*.test"} {
+	for _, want := range []string{"*.exe", "*.out", "*.test", "coverage.out"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("expected %q in .gitignore:\n%s", want, content)
 		}
+	}
+}
+
+func TestGitPlugin_GoLambda_HasBootstrap(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\n")
+
+	if err := p.Init(project.Meta{Name: "myhandler", Template: "go-lambda"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	for _, want := range []string{"*.exe", "*.test", "bootstrap"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected %q in .gitignore:\n%s", want, content)
+		}
+	}
+}
+
+func TestGitPlugin_GoKnative_CreatesGitignore(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\n")
+
+	if err := p.Init(project.Meta{Name: "myfunc", Template: "go-knative"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	for _, want := range []string{"*.exe", "*.test", "coverage.out"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected %q in .gitignore:\n%s", want, content)
+		}
+	}
+}
+
+func TestGitPlugin_Java_CreatesGitignore(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "java"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	for _, want := range []string{"target/", "*.class", ".idea/", "*.iml", ".DS_Store"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected %q in .gitignore:\n%s", want, content)
+		}
+	}
+}
+
+func TestGitPlugin_JavaMultimodule_CreatesGitignore(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\n")
+
+	if err := p.Init(project.Meta{Name: "myparent", Template: "java-multimodule"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	for _, want := range []string{"target/", "*.class", ".idea/"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected %q in .gitignore:\n%s", want, content)
+		}
+	}
+}
+
+func TestGitPlugin_JavaLambda_CreatesGitignore(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\n")
+
+	if err := p.Init(project.Meta{Name: "myhandler", Template: "java-lambda"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	for _, want := range []string{"target/", "*.class"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected %q in .gitignore:\n%s", want, content)
+		}
+	}
+}
+
+func TestGitPlugin_JavaSpring_CreatesGitignore(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\n")
+
+	if err := p.Init(project.Meta{Name: "myservice", Template: "java-spring"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	for _, want := range []string{"target/", "*.class", ".idea/"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected %q in .gitignore:\n%s", want, content)
+		}
+	}
+}
+
+func TestGitPlugin_CustomPatterns(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\ngitignore:\n  - \".env.local\"\n  - \"secrets.json\"\n")
+
+	if err := p.Init(project.Meta{Name: "my-app", Template: "node-ts"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	for _, want := range []string{"node_modules/", ".env.local", "secrets.json"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected %q in .gitignore:\n%s", want, content)
+		}
+	}
+}
+
+func TestGitPlugin_CustomPatterns_OnlyWhenGitEnabled(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "gitignore:\n  - \".env.local\"\n")
+
+	if err := p.Init(project.Meta{Name: "my-app", Template: "node-ts"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".gitignore")); !os.IsNotExist(err) {
+		t.Error("expected no .gitignore when git key absent")
 	}
 }
 
