@@ -84,6 +84,8 @@ The following plugins are included in the repository and available for platform 
 
 **`WorkspacesPlugin`** (`internal/plugins/workspaces`). Sets `private: true` and `workspaces: ["packages/*"]` on node-ts projects, configuring the project root as an npm workspace host.
 
+**`GitHubActionsPlugin`** (`internal/plugins/github`). Synthesizes GitHub Actions workflow files. Activated by `github: true` (CI only) or `github: {ci: true, release: true}` in `.forglet.yml`. Template-aware across all three language groups: Go uses goreleaser for releases; Java uses Maven and `softprops/action-gh-release`; Node uses esbuild-based `npm run build` and `action-gh-release`. The default branch for CI triggers is `main`; override with `defaultBranch` in the rc config. Both workflow files are cross-cutting managed files rendered via `FormatYAML` — no synthesizer changes are needed to support a new template group, only a new case in the plugin's payload functions.
+
 ---
 
 ### Release infrastructure

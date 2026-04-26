@@ -133,6 +133,21 @@ allowScripts:                      # @lavamoat/allow-scripts configuration
   "esbuild": true
 ```
 
+**Cross-cutting keys** (all templates, interpreted by plugins)
+
+```yaml
+git: true                              # GitPlugin: .gitignore with template-appropriate patterns
+gitignore:                             # GitPlugin: additional patterns appended after template defaults
+  - ".env.local"
+  - "secrets.json"
+
+github: true                           # GitHubPlugin: CI workflow on push/PR to main
+github:
+  ci: true                             # .github/workflows/ci.yml
+  release: true                        # .github/workflows/release.yml
+  defaultBranch: "develop"             # CI trigger branch (default: main)
+```
+
 ## Plugins
 
 ### Default binary
@@ -155,6 +170,7 @@ The following plugins are included in the repository and can be registered in a 
 | Package | Type | What it does |
 |---|---|---|
 | `internal/plugins/cdk` | Plugin + Scaffolder | AWS CDK devDependencies, `cdk.json`, and `bin/app.ts` + `lib/stack.ts` scaffolds for `node-ts` |
+| `internal/plugins/github` | Plugin | GitHub Actions CI and release workflows; template-aware (Go/Java/Node); activated by `github:` in `.forglet.yml` |
 | `internal/plugins/knative` | Plugin + Scaffolder | `.knative/service.yaml`, `.dockerignore`, and `Dockerfile` scaffold for `node-ts` |
 | `internal/plugins/lerna` | Plugin | `lerna.json` and `lerna` devDependency for `node-ts`; pair with WorkspacesPlugin |
 | `internal/plugins/workspaces` | Plugin | `private: true` and `workspaces: ["packages/*"]` for `node-ts` |
