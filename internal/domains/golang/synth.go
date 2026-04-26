@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/forgant-foundry/eventing"
@@ -92,6 +93,8 @@ func (s *Flat) Synthesize(dir string, aggregates map[string]*eventing.Aggregate)
 	return nil
 }
 
+func (s *Flat) PostSynthesize(dir string) error { return goModTidy(dir) }
+
 // Workspace synthesizes a Go workspace (go.work + per-module scaffolds).
 // Managed files: go.work
 type Workspace struct{}
@@ -177,6 +180,8 @@ func (s *Workspace) Synthesize(dir string, aggregates map[string]*eventing.Aggre
 	return nil
 }
 
+func (s *Workspace) PostSynthesize(dir string) error { return goWorkSync(dir) }
+
 // Lambda synthesizes a Go AWS Lambda project.
 // Managed files: go.mod
 type Lambda struct{}
@@ -232,6 +237,8 @@ func (s *Lambda) Synthesize(dir string, aggregates map[string]*eventing.Aggregat
 
 	return nil
 }
+
+func (s *Lambda) PostSynthesize(dir string) error { return goModTidy(dir) }
 
 func lambdaMainGo() []byte {
 	// Cannot use raw string literal — struct tags contain backticks.
@@ -351,6 +358,8 @@ func (s *KnativeFunc) Synthesize(dir string, aggregates map[string]*eventing.Agg
 
 	return nil
 }
+
+func (s *KnativeFunc) PostSynthesize(dir string) error { return goModTidy(dir) }
 
 func knativeFuncHandleGo() []byte {
 	return []byte(`package main
@@ -572,4 +581,36 @@ func newID() string {
 	b := make([]byte, 8)
 	rand.Read(b)
 	return fmt.Sprintf("%x", b)
+}
+
+// goModTidy runs 'go mod tidy' in dir, resolving indirect dependencies and
+// updating go.sum. go.mod is written read-only by WriteManaged, so it is made
+// writable before the command runs and restored to read-only after.
+func goModTidy(dir string) error {
+	modPath := filepath.Join(dir, "go.mod")
+	if err := os.Chmod(modPath, 0644); err != nil {
+		return fmt.Errorf("go mod tidy: chmod go.mod: %w", err)
+	}
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("go mod tidy: %w\n%s", err, out)
+	}
+	return os.Chmod(modPath, 0444)
+}
+
+// goWorkSync runs 'go work sync' in dir, syncing the workspace build list back
+// to each member module's go.mod. Used in place of goModTidy for workspace
+// projects where there is no go.mod at the root.
+func goWorkSync(dir string) error {
+	workPath := filepath.Join(dir, "go.work")
+	if err := os.Chmod(workPath, 0644); err != nil {
+		return fmt.Errorf("go work sync: chmod go.work: %w", err)
+	}
+	cmd := exec.Command("go", "work", "sync")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("go work sync: %w\n%s", err, out)
+	}
+	return os.Chmod(workPath, 0444)
 }

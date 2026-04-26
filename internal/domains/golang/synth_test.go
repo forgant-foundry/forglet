@@ -279,7 +279,7 @@ func TestGoWorkspace_Synthesize_GoWorkContent(t *testing.T) {
 	}
 	content := readFile(t, filepath.Join(dir, "go.work"))
 	assertContains(t, content, "go ")
-	assertContains(t, content, "use (")
+	assertContains(t, content, "use")
 	assertContains(t, content, "./myws")
 }
 

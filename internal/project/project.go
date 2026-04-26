@@ -61,6 +61,16 @@ type Scaffolder interface {
 	Scaffold(dir string, meta Meta) error
 }
 
+// PostSynthesizer is an optional interface that synthesizers implement to run
+// post-synthesis operations that depend on the written files being present on
+// disk — for example, running 'go mod tidy' after writing go.mod. It is called
+// by Project.Synthesize after the synthesizer's Synthesize method completes.
+// It is NOT called when tests invoke Synthesize directly, keeping unit tests
+// free of network and toolchain dependencies.
+type PostSynthesizer interface {
+	PostSynthesize(dir string) error
+}
+
 // Project manages a forglet project rooted at a directory.
 type Project struct {
 	root       string
@@ -149,6 +159,11 @@ func (p *Project) Synthesize(s Synthesizer) error {
 	}
 	if err := s.Synthesize(p.root, aggregates); err != nil {
 		return err
+	}
+	if ps, ok := s.(PostSynthesizer); ok {
+		if err := ps.PostSynthesize(p.root); err != nil {
+			return err
+		}
 	}
 	return p.runValidators(meta, rc)
 }
