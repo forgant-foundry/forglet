@@ -13,10 +13,12 @@ import (
 
 const forgletDir = ".forglet"
 
-// Meta holds project-level metadata stored in .forglet/project.json.
+// Meta holds project-level metadata. Name and Template are stored in
+// .forglet.yml alongside any user RC config so the file can be committed
+// without committing .forglet/ aggregate snapshots.
 type Meta struct {
-	Name     string `json:"name"`
-	Template string `json:"template"`
+	Name     string
+	Template string
 }
 
 // Synthesizer builds and writes managed project files from three event layers.
@@ -82,9 +84,9 @@ func (p *Project) WithValidators(validators ...Validator) *Project {
 	return p
 }
 
-// Init creates .forglet/, writes metadata, synthesizes all managed files, and
-// runs any plugin Scaffolders. Scaffolding happens after synthesis and only
-// during Init — re-synth never touches scaffold files.
+// Init writes name and template into .forglet.yml, synthesizes all managed
+// files, and runs any plugin Scaffolders. Scaffolding happens after synthesis
+// and only during Init — re-synth never touches scaffold files.
 func (p *Project) Init(meta Meta, s Synthesizer) error {
 	if err := os.MkdirAll(filepath.Join(p.root, forgletDir), 0755); err != nil {
 		return err
@@ -249,21 +251,42 @@ func mergeObjects(base, overlay eventing.Object) eventing.Object {
 	return result
 }
 
+// SaveMeta writes name and template into .forglet.yml, merging with any
+// existing content so user RC keys are preserved.
 func (p *Project) SaveMeta(meta Meta) error {
-	b, err := json.MarshalIndent(meta, "", "  ")
+	path := filepath.Join(p.root, ".forglet.yml")
+	rc := map[string]any{}
+	if b, err := os.ReadFile(path); err == nil {
+		_ = yaml.Unmarshal(b, &rc)
+	}
+	rc["name"] = meta.Name
+	rc["template"] = meta.Template
+	b, err := yaml.Marshal(rc)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(p.root, forgletDir, "project.json"), b, 0644)
+	return os.WriteFile(path, b, 0644)
 }
 
+// LoadMeta reads name and template from .forglet.yml.
 func (p *Project) LoadMeta() (Meta, error) {
-	b, err := os.ReadFile(filepath.Join(p.root, forgletDir, "project.json"))
-	if err != nil {
-		return Meta{}, fmt.Errorf("not a forglet project: %w", err)
+	b, err := os.ReadFile(filepath.Join(p.root, ".forglet.yml"))
+	if os.IsNotExist(err) {
+		return Meta{}, fmt.Errorf("not a forglet project (no .forglet.yml)")
 	}
-	var meta Meta
-	return meta, json.Unmarshal(b, &meta)
+	if err != nil {
+		return Meta{}, err
+	}
+	var rc map[string]any
+	if err := yaml.Unmarshal(b, &rc); err != nil {
+		return Meta{}, err
+	}
+	name, _ := rc["name"].(string)
+	tmpl, _ := rc["template"].(string)
+	if tmpl == "" {
+		return Meta{}, fmt.Errorf("not a forglet project (.forglet.yml has no 'template' key)")
+	}
+	return Meta{Name: name, Template: tmpl}, nil
 }
 
 // loadRC reads .forglet.yml from the project root.

@@ -84,7 +84,7 @@ func TestGitPlugin_Go_CreatesGitignore(t *testing.T) {
 	}
 
 	content := readFile(t, filepath.Join(dir, ".gitignore"))
-	for _, want := range []string{"*.exe", "*.out", "*.test", "coverage.out", ".DS_Store"} {
+	for _, want := range []string{"*.exe", "*.out", "*.test", "coverage.out", ".DS_Store", ".forglet/"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("expected %q in .gitignore:\n%s", want, content)
 		}

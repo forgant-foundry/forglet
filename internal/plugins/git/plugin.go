@@ -10,21 +10,23 @@ import (
 )
 
 // patterns maps template names to the .gitignore patterns appropriate for that stack.
+// .forglet/ is included for every template — it holds aggregate snapshots that are
+// always re-derived on synth and should not be committed.
 var patterns = map[string][]string{
 	// Go
-	"go":           {".DS_Store", "*.exe", "*.exe~", "*.out", "*.test", "coverage.out"},
-	"go-workspace": {".DS_Store", "*.exe", "*.exe~", "*.out", "*.test", "coverage.out"},
-	"go-lambda":    {".DS_Store", "*.exe", "*.exe~", "*.out", "*.test", "bootstrap", "coverage.out"},
-	"go-knative":   {".DS_Store", "*.exe", "*.exe~", "*.out", "*.test", "coverage.out"},
+	"go":           {".DS_Store", ".forglet/", "*.exe", "*.exe~", "*.out", "*.test", "coverage.out"},
+	"go-workspace": {".DS_Store", ".forglet/", "*.exe", "*.exe~", "*.out", "*.test", "coverage.out"},
+	"go-lambda":    {".DS_Store", ".forglet/", "*.exe", "*.exe~", "*.out", "*.test", "bootstrap", "coverage.out"},
+	"go-knative":   {".DS_Store", ".forglet/", "*.exe", "*.exe~", "*.out", "*.test", "coverage.out"},
 	// Java
-	"java":            {".DS_Store", ".idea/", "*.class", "*.iml", "target/"},
-	"java-multimodule": {".DS_Store", ".idea/", "*.class", "*.iml", "target/"},
-	"java-lambda":     {".DS_Store", ".idea/", "*.class", "*.iml", "target/"},
-	"java-spring":     {".DS_Store", ".idea/", "*.class", "*.iml", "target/"},
+	"java":             {".DS_Store", ".forglet/", ".idea/", "*.class", "*.iml", "target/"},
+	"java-multimodule": {".DS_Store", ".forglet/", ".idea/", "*.class", "*.iml", "target/"},
+	"java-lambda":      {".DS_Store", ".forglet/", ".idea/", "*.class", "*.iml", "target/"},
+	"java-spring":      {".DS_Store", ".forglet/", ".idea/", "*.class", "*.iml", "target/"},
 	// Node
-	"node-ts":     {".DS_Store", ".env", "dist/", "node_modules/"},
-	"node-js":     {".DS_Store", ".env", "node_modules/"},
-	"node-lambda": {".DS_Store", ".env", "dist/", "node_modules/"},
+	"node-ts":     {".DS_Store", ".env", ".forglet/", "dist/", "node_modules/"},
+	"node-js":     {".DS_Store", ".env", ".forglet/", "node_modules/"},
+	"node-lambda": {".DS_Store", ".env", ".forglet/", "dist/", "node_modules/"},
 }
 
 // Plugin adds a .gitignore file when git: true is set in .forglet.yml.
