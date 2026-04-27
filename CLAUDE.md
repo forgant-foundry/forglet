@@ -227,6 +227,58 @@ Test layers:
 
 The plugin must not assume it is the only contributor to any file. Check `meta.Template` for domain-awareness and inspect `stream.Events()` for plugin-awareness.
 
+### Adding a Proprietary License
+
+Platform teams that need a proprietary or non-SPDX license do not write a new plugin. Instead, they extend the built-in license plugin at construction time using `WithCustom` and register the extended plugin in their custom `main.go`:
+
+```go
+// cmd/myforglet/main.go
+package main
+
+import (
+    "fmt"
+    "os"
+
+    "github.com/forgant-foundry/forglet/cmd/forglet/commands"
+    licenseplugin "github.com/forgant-foundry/forglet/internal/plugins/license"
+)
+
+// Embed or load the license text however suits the platform (literal string,
+// //go:embed, read from a secure store at build time, etc.).
+const proprietaryLicense = `Proprietary Software License
+
+Copyright (c) {{COPYRIGHT}} Acme Corp. All rights reserved.
+
+This software and its source code are confidential and proprietary to
+Acme Corp. Unauthorised copying, distribution, or use is strictly
+prohibited without prior written consent from Acme Corp.
+`
+
+func main() {
+    commands.RegisterPlugin(licenseplugin.New(
+        licenseplugin.WithCustom("acme-proprietary", proprietaryLicense),
+    ))
+    // register other platform plugins...
+    if err := commands.Execute(); err != nil {
+        fmt.Fprintln(os.Stderr, err)
+        os.Exit(1)
+    }
+}
+```
+
+Projects managed by this binary then select the license in `.forglet.yml`:
+
+```yaml
+license:
+  spdx: acme-proprietary
+  year: 2024
+  author: "Acme Corp"
+```
+
+The `{{COPYRIGHT}}` placeholder in the license text is replaced with `"YEAR AUTHOR"` (or just `"YEAR"` when author is omitted), identically to the built-in SPDX licenses. Custom names are matched case-insensitively. If a custom name collides with a built-in SPDX identifier, the custom text wins — this lets a platform team substitute a modified MIT or Apache text when required.
+
+The `LICENSE` file is rendered via `FormatText`, which writes the text verbatim with no forglet managed-comment marker, so the file passes GitHub's license detection and standard license tooling without modification.
+
 ## Evolution
 
 ### Mutual Client Relationship with vergant
