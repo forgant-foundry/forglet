@@ -145,9 +145,15 @@ github: true                           # GitHubPlugin: CI workflow on push/PR to
 github:
   ci: true                             # .github/workflows/ci.yml
   release: true                        # .github/workflows/release.yml (goreleaser / v*-tags)
-  delivery: true                       # .github/workflows/delivery.yml (vergant / branch-driven CD)
+  delivery: true                       # .github/workflows/delivery.yml + .vergant.yml
   delivery:
     kind: library                      # vergant versioning + plain GitHub release, no artifacts
+    majorVersion: 2                    # .vergant.yml: current major version (default: 1)
+    defaultBranch: develop             # .vergant.yml: trunk branch (default: main)
+    supportBranchRegEx: "^release/.*" # .vergant.yml: support branch pattern
+    devBranchRegEx: "^feature/(.+)$"  # .vergant.yml: dev/pre-release branch pattern
+    patchBranchRegEx: "^hotfix/(.+)$" # .vergant.yml: patch/pre-release branch pattern
+    mode: candidate                    # .vergant.yml: "release" or "candidate" (default: release)
   defaultBranch: "develop"             # CI trigger branch (default: main)
 
 license: MIT                           # LicensePlugin: managed LICENSE file (shorthand)

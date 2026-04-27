@@ -193,7 +193,7 @@ Single `go.mod` at the root (`github.com/forgant-foundry/forglet`):
 - `internal/domains/node/` — `node-ts` and `node-js` synthesizers (`package.json`, `tsconfig.json`, `src/index.ts` / `index.js` scaffolds)
 - `internal/domains/golang/` — `go` and `go-workspace` synthesizers (`go.mod` / `go.work`, module scaffolds)
 - `internal/plugins/git/` — cross-cutting `.gitignore` support, driven by `meta.Template` + `rc["git"]`
-- `internal/plugins/github/` — GitHub Actions workflows (`ci.yml`, `release.yml`, `delivery.yml` via `FormatYAML`); delivery uses vergant for branch-driven CD; supports `kind: library` for no-artifact releases
+- `internal/plugins/github/` — GitHub Actions workflows (`ci.yml`, `release.yml`, `delivery.yml` via `FormatYAML`) and `.vergant.yml` (via `FormatYAML`); delivery uses vergant for branch-driven CD; supports `kind: library` for no-artifact releases; all vergant config fields (`majorVersion`, `defaultBranch`, branch regexes, `mode`) are driven from the `delivery` section of `.forglet.yml`
 - `internal/plugins/license/` — managed `LICENSE` file via `FormatText`; built-in SPDX texts (MIT, Apache-2.0, GPL-3.0, AGPL-3.0, ISC); extended by platform teams via `WithCustom`
 - `internal/plugins/workspaces/` — npm workspaces (`private: true`, `workspaces: ["packages/*"]`)
 - `internal/plugins/lerna/` — Lerna monorepo (`lerna.json` via `FormatJSON`, `lerna` devDependency)

@@ -636,6 +636,146 @@ func TestDelivery_Idempotent(t *testing.T) {
 	}
 }
 
+// ---- .vergant.yml ----------------------------------------------------------------
+
+func TestVergant_FileCreated(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".vergant.yml")); err != nil {
+		t.Errorf(".vergant.yml not created: %v", err)
+	}
+}
+
+func TestVergant_HasDefaultFields(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".vergant.yml"))
+	assertContains(t, content, "majorVersion: 1")
+	assertContains(t, content, "defaultBranch: main")
+	assertContains(t, content, "mode: release")
+	assertContains(t, content, "supportBranchRegEx")
+	assertContains(t, content, "devBranchRegEx")
+	assertContains(t, content, "patchBranchRegEx")
+}
+
+func TestVergant_MajorVersionOverride(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    majorVersion: 3\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	assertContains(t, readFile(t, filepath.Join(dir, ".vergant.yml")), "majorVersion: 3")
+}
+
+func TestVergant_DefaultBranchOverride(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    defaultBranch: develop\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	assertContains(t, readFile(t, filepath.Join(dir, ".vergant.yml")), "defaultBranch: develop")
+}
+
+func TestVergant_ModeCandidate(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    mode: candidate\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	assertContains(t, readFile(t, filepath.Join(dir, ".vergant.yml")), "mode: candidate")
+}
+
+func TestVergant_CustomBranchRegex(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    supportBranchRegEx: \"^release/.*\"\n    devBranchRegEx: \"^feature/(.+)$\"\n    patchBranchRegEx: \"^hotfix/(.+)$\"\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".vergant.yml"))
+	assertContains(t, content, "^release/")
+	assertContains(t, content, "^feature/")
+	assertContains(t, content, "^hotfix/")
+}
+
+func TestVergant_IsReadOnly(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Stat(filepath.Join(dir, ".vergant.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0444 {
+		t.Errorf(".vergant.yml mode = %04o, want 0444", info.Mode().Perm())
+	}
+}
+
+func TestVergant_HasManagedMarker(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	assertContains(t, readFile(t, filepath.Join(dir, ".vergant.yml")), "forglet")
+}
+
+func TestVergant_AbsentWithoutDelivery(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".vergant.yml")); !os.IsNotExist(err) {
+		t.Error(".vergant.yml should not be created when delivery is not enabled")
+	}
+}
+
+func TestVergant_Idempotent(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    majorVersion: 2\n    mode: candidate\n")
+	s := &noopSynth{}
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, s); err != nil {
+		t.Fatal(err)
+	}
+	first := readFile(t, filepath.Join(dir, ".vergant.yml"))
+
+	if err := p.Synthesize(s); err != nil {
+		t.Fatal(err)
+	}
+	second := readFile(t, filepath.Join(dir, ".vergant.yml"))
+
+	if first != second {
+		t.Errorf(".vergant.yml changed after second synth:\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+}
+
 // ---- helpers ---------------------------------------------------------------------
 
 func setup(t *testing.T) (string, *project.Project) {

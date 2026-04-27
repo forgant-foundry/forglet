@@ -14,19 +14,27 @@ const (
 	ciFile       = ".github/workflows/ci.yml"
 	releaseFile  = ".github/workflows/release.yml"
 	deliveryFile = ".github/workflows/delivery.yml"
+	vergantFile  = ".vergant.yml"
 )
 
-// GitHubActionsPlugin synthesizes GitHub Actions workflow files.
+// GitHubActionsPlugin synthesizes GitHub Actions workflow files and a managed
+// .vergant.yml when delivery is enabled.
 // Activated via .forglet.yml:
 //
 //	github: true                       # CI workflow only
 //	github:
-//	  ci: true                         # CI workflow
-//	  release: true                    # release workflow (goreleaser/v*-tags)
-//	  delivery: true                   # vergant-based CD workflow (binary, default)
+//	  ci: true                         # .github/workflows/ci.yml
+//	  release: true                    # .github/workflows/release.yml (goreleaser/v*-tags)
+//	  delivery: true                   # .github/workflows/delivery.yml + .vergant.yml
 //	  delivery:
 //	    kind: library                  # vergant versioning + plain GitHub release, no artifacts
-//	  defaultBranch: "develop"         # branch CI triggers on (default: main)
+//	    majorVersion: 2                # .vergant.yml: major version (default: 1)
+//	    defaultBranch: develop         # .vergant.yml: trunk branch (default: main)
+//	    supportBranchRegEx: "^release/.*"  # .vergant.yml: support branch pattern
+//	    devBranchRegEx: "^feature/(.+)$"  # .vergant.yml: dev branch pattern
+//	    patchBranchRegEx: "^hotfix/(.+)$" # .vergant.yml: patch branch pattern
+//	    mode: candidate                # .vergant.yml: "release" or "candidate"
+//	  defaultBranch: "develop"         # CI trigger branch (default: main)
 //
 // Workflow content is template-aware: Go templates cross-compile binaries,
 // Java builds and uploads JARs, Node publishes to npm. Unknown templates are ignored.
@@ -35,8 +43,8 @@ type GitHubActionsPlugin struct{}
 func New() *GitHubActionsPlugin { return &GitHubActionsPlugin{} }
 
 func (p *GitHubActionsPlugin) Weave(meta project.Meta, rc map[string]any, stream *project.EventStream) error {
-	ci, release, delivery, deliveryKind, branch := parseRC(rc)
-	if !ci && !release && !delivery {
+	ci, release, delivery, branch := parseRC(rc)
+	if !ci && !release && !delivery.enabled {
 		return nil
 	}
 
@@ -73,8 +81,8 @@ func (p *GitHubActionsPlugin) Weave(meta project.Meta, rc map[string]any, stream
 		})
 	}
 
-	if delivery {
-		payload, err := json.Marshal(deliveryPayload(group, meta.Name, deliveryKind))
+	if delivery.enabled {
+		payload, err := json.Marshal(deliveryPayload(group, meta.Name, delivery.kind))
 		if err != nil {
 			return fmt.Errorf("github plugin: delivery payload: %w", err)
 		}
@@ -85,14 +93,51 @@ func (p *GitHubActionsPlugin) Weave(meta project.Meta, rc map[string]any, stream
 			Seq:     1,
 			Payload: json.RawMessage(payload),
 		})
+
+		vpayload, err := json.Marshal(vergantPayload(delivery))
+		if err != nil {
+			return fmt.Errorf("github plugin: vergant payload: %w", err)
+		}
+		stream.SetFormat(vergantFile, project.FormatYAML)
+		stream.Append(vergantFile, eventing.Event{
+			ID:      newID(),
+			Type:    "vergant.configured",
+			Seq:     1,
+			Payload: json.RawMessage(vpayload),
+		})
 	}
 
 	return nil
 }
 
-func parseRC(rc map[string]any) (ci, release, delivery bool, deliveryKind, branch string) {
+// deliveryCfg holds delivery workflow and vergant versioning configuration
+// parsed from the github.delivery section of .forglet.yml.
+type deliveryCfg struct {
+	enabled            bool
+	kind               string
+	majorVersion       int
+	defaultBranch      string
+	supportBranchRegEx string
+	devBranchRegEx     string
+	patchBranchRegEx   string
+	mode               string
+}
+
+func defaultDeliveryCfg() deliveryCfg {
+	return deliveryCfg{
+		kind:               "binary",
+		majorVersion:       1,
+		defaultBranch:      "main",
+		supportBranchRegEx: `^support\/.*`,
+		devBranchRegEx:     `^dev\/(.+)$`,
+		patchBranchRegEx:   `^patch\/(.+)$`,
+		mode:               "release",
+	}
+}
+
+func parseRC(rc map[string]any) (ci, release bool, delivery deliveryCfg, branch string) {
 	branch = "main"
-	deliveryKind = "binary"
+	delivery = defaultDeliveryCfg()
 	switch v := rc["github"].(type) {
 	case bool:
 		ci = v
@@ -101,11 +146,29 @@ func parseRC(rc map[string]any) (ci, release, delivery bool, deliveryKind, branc
 		release, _ = v["release"].(bool)
 		switch d := v["delivery"].(type) {
 		case bool:
-			delivery = d
+			delivery.enabled = d
 		case map[string]any:
-			delivery = true
+			delivery.enabled = true
 			if k, ok := d["kind"].(string); ok && k != "" {
-				deliveryKind = k
+				delivery.kind = k
+			}
+			if mv, ok := d["majorVersion"].(int); ok {
+				delivery.majorVersion = mv
+			}
+			if db, ok := d["defaultBranch"].(string); ok && db != "" {
+				delivery.defaultBranch = db
+			}
+			if s, ok := d["supportBranchRegEx"].(string); ok && s != "" {
+				delivery.supportBranchRegEx = s
+			}
+			if s, ok := d["devBranchRegEx"].(string); ok && s != "" {
+				delivery.devBranchRegEx = s
+			}
+			if s, ok := d["patchBranchRegEx"].(string); ok && s != "" {
+				delivery.patchBranchRegEx = s
+			}
+			if s, ok := d["mode"].(string); ok && s != "" {
+				delivery.mode = s
 			}
 		}
 		if b, ok := v["defaultBranch"].(string); ok && b != "" {
@@ -360,6 +423,17 @@ func deliveryPayload(group, name, kind string) map[string]any {
 				"steps":       steps,
 			},
 		},
+	}
+}
+
+func vergantPayload(cfg deliveryCfg) map[string]any {
+	return map[string]any{
+		"majorVersion":       cfg.majorVersion,
+		"defaultBranch":      cfg.defaultBranch,
+		"supportBranchRegEx": cfg.supportBranchRegEx,
+		"devBranchRegEx":     cfg.devBranchRegEx,
+		"patchBranchRegEx":   cfg.patchBranchRegEx,
+		"mode":               cfg.mode,
 	}
 }
 
