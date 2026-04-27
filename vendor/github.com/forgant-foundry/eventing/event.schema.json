@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/forgant-foundry/eventing/event.schema.json",
+  "title": "Event",
+  "description": "A domain event applied to an Aggregate. The payload is a JSON object; each key sets, deletes, or moves the corresponding top-level node.",
+  "type": "object",
+  "required": ["type", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique event identifier. Recorded as eventId in node provenance."
+    },
+    "type": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Event type discriminator. Required. Recorded as eventType in node provenance."
+    },
+    "seq": {
+      "type": "integer",
+      "description": "Monotonic sequence number. Use 1, 2, 3... for synthetic ordering or time.Now().UnixNano() for time-ordered domains. Recoverable as a time via Event.Time()."
+    },
+    "payload": {
+      "type": "object",
+      "description": "Key/value changes to apply. Each key names a top-level node in the aggregate.",
+      "additionalProperties": {
+        "$ref": "#/$defs/payloadValue"
+      }
+    }
+  },
+  "$defs": {
+    "payloadValue": {
+      "description": "null marks the node deleted; {\"__moveTo\":[...]} moves it; any other value sets it.",
+      "if": {
+        "type": "object",
+        "required": ["__moveTo"],
+        "maxProperties": 1
+      },
+      "then": {
+        "$ref": "#/$defs/moveDirective"
+      },
+      "else": true
+    },
+    "moveDirective": {
+      "description": "Moves the source node to the target path. Intermediate Object nodes are created as needed.",
+      "type": "object",
+      "required": ["__moveTo"],
+      "additionalProperties": false,
+      "properties": {
+        "__moveTo": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "description": "Path segments naming the target node. One segment: same-level rename. Multiple segments: cross-level move with intermediate objects created as needed."
+        }
+      }
+    }
+  }
+}

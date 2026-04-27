@@ -74,16 +74,22 @@ When output format changes intentionally, run `go test -update`, review the diff
 
 ## Releases
 
-Releases are Git tags; the Go module system resolves versions from tags — no registry or build step needed.
+Releases are automated via `.github/workflows/delivery.yml`. Pushing to `main` triggers vergant, which computes the next semantic version and cuts a tag; the workflow then creates a GitHub release with generated notes.
 
-Follow semantic versioning (`vMAJOR.MINOR.PATCH`). Before tagging:
+Follow semantic versioning (`vMAJOR.MINOR.PATCH`):
+
+| Change | Bump |
+|--------|------|
+| Bug fix, no API change | patch |
+| New exported symbol, backwards-compatible | minor |
+| Breaking change to any exported type or method | major |
+
+Before merging to `main`:
 
 - All tests pass: `go test ./...`
 - Golden files are current (no uncommitted diffs after `go test -update`)
 - `go.mod` and `go.sum` are committed
 - CLAUDE.md and README.md reflect any API changes
-
-Create releases on GitHub: **Releases → Draft a new release → create tag on publish**. The Go module proxy picks up the new tag within a few minutes.
 
 **Major version note:** v2+ releases require updating the module path in `go.mod` and all import paths to `github.com/forgant-foundry/eventing/v2`. The library is currently at v1, so no path change is needed.
 

@@ -1,0 +1,21 @@
+name: eventing
+template: go
+
+module: github.com/forgant-foundry/eventing
+go: "1.25.5"
+require:
+  github.com/BurntSushi/toml: v1.6.0
+  github.com/stretchr/testify: v1.11.1
+  gopkg.in/yaml.v3: v3.0.1
+
+license:
+  spdx: MIT
+  author: Forgant
+
+git: true
+
+github:
+  delivery:
+    kind: library
+    majorVersion: 1
+  defaultBranch: main
