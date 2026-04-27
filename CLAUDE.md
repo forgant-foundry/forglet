@@ -145,6 +145,7 @@ func (p *MyPlugin) Weave(meta project.Meta, rc map[string]any, stream *project.E
 | `project.FormatPattern` | One active key per line, `#` managed comment header |
 | `project.FormatJSON` | Pretty-printed JSON object, `//` managed comment key |
 | `project.FormatYAML` | YAML document, `#` managed comment header |
+| `project.FormatText` | Raw string value of the aggregate's `text` node; **no managed comment** (use for files where comment syntax would corrupt content, e.g. `LICENSE`) |
 
 `SetFormat` is last-write-wins. Multiple contributors may call it for the same file; since they must agree on the format (a file is either JSON or YAML, not both), conflicts indicate a design error and will surface in tests.
 
@@ -193,6 +194,7 @@ Single `go.mod` at the root (`github.com/forgant-foundry/forglet`):
 - `internal/domains/golang/` — `go` and `go-workspace` synthesizers (`go.mod` / `go.work`, module scaffolds)
 - `internal/plugins/git/` — cross-cutting `.gitignore` support, driven by `meta.Template` + `rc["git"]`
 - `internal/plugins/github/` — GitHub Actions workflows (`ci.yml`, `release.yml`, `delivery.yml` via `FormatYAML`); delivery uses vergant for branch-driven CD; supports `kind: library` for no-artifact releases
+- `internal/plugins/license/` — managed `LICENSE` file via `FormatText`; built-in SPDX texts (MIT, Apache-2.0, GPL-3.0, AGPL-3.0, ISC); extended by platform teams via `WithCustom`
 - `internal/plugins/workspaces/` — npm workspaces (`private: true`, `workspaces: ["packages/*"]`)
 - `internal/plugins/lerna/` — Lerna monorepo (`lerna.json` via `FormatJSON`, `lerna` devDependency)
 - `internal/plugins/cdk/` — AWS CDK (`cdk.json` via `FormatJSON`, CDK devDependencies, scaffolds `bin/app.ts` + `lib/stack.ts`)

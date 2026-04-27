@@ -51,6 +51,7 @@ const (
 	FormatPattern FileFormat = iota // one active key per line, # managed comment
 	FormatJSON                      // pretty-printed JSON object with // managed comment key
 	FormatYAML                      // YAML document with # managed comment
+	FormatText                      // raw string value of the aggregate's "text" node; no managed comment
 )
 
 // Scaffolder is an optional interface that plugins implement to write one-time
@@ -371,6 +372,16 @@ func (p *Project) renderCrossCuttingFile(filename string, format FileFormat, agg
 			return fmt.Errorf("serialize %s: %w", filename, err)
 		}
 		content = AddTextMarker(raw, "#")
+	case FormatText:
+		n, ok := agg.Node("text")
+		if !ok {
+			return fmt.Errorf("FormatText: aggregate for %s has no 'text' node", filename)
+		}
+		s, ok := n.Value.(string)
+		if !ok {
+			return fmt.Errorf("FormatText: 'text' node for %s is not a string", filename)
+		}
+		content = []byte(s)
 	default:
 		return fmt.Errorf("unknown file format %d for %s", format, filename)
 	}
