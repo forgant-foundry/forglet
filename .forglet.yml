@@ -13,8 +13,9 @@ gitignore:
 
 license:
   id: MIT
-  author: Forgant Foundry
+  author: Forgant
 
 github:
   delivery:
     majorVersion: 1
+    kind: binary
