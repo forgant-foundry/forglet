@@ -126,7 +126,7 @@ type deliveryCfg struct {
 }
 
 func defaultDeliveryCfg() deliveryCfg {
-	return deliveryCfg{kind: "binary"}
+	return deliveryCfg{kind: "library"}
 }
 
 func parseRC(rc map[string]any) (ci, release bool, delivery deliveryCfg, branch string) {

@@ -324,7 +324,7 @@ func TestDelivery_Go_HasVergant(t *testing.T) {
 
 func TestDelivery_Go_UsesBinaryName(t *testing.T) {
 	dir, p := setup(t)
-	writeRC(t, dir, "github:\n  delivery: true\n")
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n")
 
 	if err := p.Init(project.Meta{Name: "mycli", Template: "go"}, &noopSynth{}); err != nil {
 		t.Fatal(err)
@@ -336,7 +336,7 @@ func TestDelivery_Go_UsesBinaryName(t *testing.T) {
 
 func TestDelivery_Go_HasCrossCompilation(t *testing.T) {
 	dir, p := setup(t)
-	writeRC(t, dir, "github:\n  delivery: true\n")
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n")
 
 	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
 		t.Fatal(err)
@@ -387,7 +387,7 @@ func TestDelivery_Node_HasVergant(t *testing.T) {
 
 func TestDelivery_Node_HasNpmPublish(t *testing.T) {
 	dir, p := setup(t)
-	writeRC(t, dir, "github:\n  delivery: true\n")
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n")
 
 	if err := p.Init(project.Meta{Name: "my-app", Template: "node-ts"}, &noopSynth{}); err != nil {
 		t.Fatal(err)
@@ -400,7 +400,7 @@ func TestDelivery_Node_HasNpmPublish(t *testing.T) {
 
 func TestDelivery_Node_HasNpmVersion(t *testing.T) {
 	dir, p := setup(t)
-	writeRC(t, dir, "github:\n  delivery: true\n")
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n")
 
 	if err := p.Init(project.Meta{Name: "my-app", Template: "node-ts"}, &noopSynth{}); err != nil {
 		t.Fatal(err)
@@ -437,7 +437,7 @@ func TestDelivery_Java_HasVergant(t *testing.T) {
 
 func TestDelivery_Java_HasMavenBuild(t *testing.T) {
 	dir, p := setup(t)
-	writeRC(t, dir, "github:\n  delivery: true\n")
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n")
 
 	if err := p.Init(project.Meta{Name: "myservice", Template: "java"}, &noopSynth{}); err != nil {
 		t.Fatal(err)
@@ -603,7 +603,7 @@ func TestDelivery_Java_Library_HasReleaseCreate(t *testing.T) {
 	assertContains(t, content, "--generate-notes")
 }
 
-func TestDelivery_BinaryTrue_DefaultsToKindBinary(t *testing.T) {
+func TestDelivery_DefaultsToKindLibrary(t *testing.T) {
 	dir, p := setup(t)
 	writeRC(t, dir, "github:\n  delivery: true\n")
 
@@ -612,8 +612,10 @@ func TestDelivery_BinaryTrue_DefaultsToKindBinary(t *testing.T) {
 	}
 
 	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
-	assertContains(t, content, "linux")
-	assertContains(t, content, "GOOS")
+	if strings.Contains(content, "GOOS") {
+		t.Error("default delivery kind should be library, not binary")
+	}
+	assertContains(t, content, "gh release create")
 }
 
 func TestDelivery_Idempotent(t *testing.T) {
