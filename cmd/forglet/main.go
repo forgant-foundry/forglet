@@ -6,11 +6,13 @@ import (
 
 	"github.com/forgant-foundry/forglet/cmd/forglet/commands"
 	npmpolicy "github.com/forgant-foundry/forglet/internal/baseunit/npm"
-	gitplugin "github.com/forgant-foundry/forglet/internal/plugins/git"
+	gitplugin    "github.com/forgant-foundry/forglet/internal/plugins/git"
+	githubplugin "github.com/forgant-foundry/forglet/internal/plugins/github"
 )
 
 func main() {
 	commands.RegisterPlugin(gitplugin.New())
+	commands.RegisterPlugin(githubplugin.New())
 	commands.RegisterValidator(npmpolicy.New())
 	if err := commands.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
