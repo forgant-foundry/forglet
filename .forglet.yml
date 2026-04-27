@@ -10,7 +10,10 @@ require:
 git: true
 gitignore:
   - /forglet
-  - .scratch/
+
+license:
+  spdx: MIT
+  author: Forgant Foundry
 
 github:
   delivery: true
