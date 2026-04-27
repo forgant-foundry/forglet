@@ -3,10 +3,8 @@ github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2
 github.com/cpuguy83/go-md2man/v2 v2.0.3/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/forgant-foundry/eventing v0.0.0-20260419213514-6606b9c5284f h1:PU84oNdWLG1hlai8wOZRtFuISLLNIs+6NciO2pDyBZI=
-github.com/forgant-foundry/eventing v0.0.0-20260419213514-6606b9c5284f/go.mod h1:Ca9PT4w8ccY33JZwOVHHuYbImOalFcbGGwkwus958t0=
-github.com/forgant-foundry/eventing v0.0.0-20260427024055-dcc6fcefd427 h1:aR+fQMfTN9YYDdS/HGue+VmQ411OWTxx1BICWieyr0M=
-github.com/forgant-foundry/eventing v0.0.0-20260427024055-dcc6fcefd427/go.mod h1:EXAQqlqEfaEKqYtUV9g4X4pnS64fa8qV/U3uTP2SXiY=
+github.com/forgant-foundry/eventing v1.0.0 h1:/DlYGpSywkXNOMPvjUvxRJlsGt9JQLE+tm83fXjuSUM=
+github.com/forgant-foundry/eventing v1.0.0/go.mod h1:EXAQqlqEfaEKqYtUV9g4X4pnS64fa8qV/U3uTP2SXiY=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

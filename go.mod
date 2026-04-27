@@ -4,7 +4,7 @@ module github.com/forgant-foundry/forglet
 go 1.25.5
 
 require (
-	github.com/forgant-foundry/eventing v0.0.0-20260427024055-dcc6fcefd427
+	github.com/forgant-foundry/eventing v1.0.0
 	github.com/spf13/cobra v1.8.0
 	gopkg.in/yaml.v3 v3.0.1
 )
