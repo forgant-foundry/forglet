@@ -504,6 +504,118 @@ func TestDelivery_GithubTrue_NoDeliveryWorkflow(t *testing.T) {
 	}
 }
 
+// ---- Library kind ----------------------------------------------------------------
+
+func TestDelivery_Go_Library_NoCrossCompilation(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: library\n")
+
+	if err := p.Init(project.Meta{Name: "mylib", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	if strings.Contains(content, "linux") {
+		t.Error("library delivery should not contain 'linux'")
+	}
+	if strings.Contains(content, "GOOS") {
+		t.Error("library delivery should not contain 'GOOS'")
+	}
+}
+
+func TestDelivery_Go_Library_HasReleaseCreate(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: library\n")
+
+	if err := p.Init(project.Meta{Name: "mylib", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "gh release create")
+	assertContains(t, content, "--generate-notes")
+}
+
+func TestDelivery_Go_Library_NoDistFiles(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: library\n")
+
+	if err := p.Init(project.Meta{Name: "mylib", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	if strings.Contains(content, "dist/") {
+		t.Error("library delivery should not reference dist/")
+	}
+}
+
+func TestDelivery_Node_Library_NoNpmPublish(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: library\n")
+
+	if err := p.Init(project.Meta{Name: "my-lib", Template: "node-ts"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	if strings.Contains(content, "npm publish") {
+		t.Error("library delivery should not contain 'npm publish'")
+	}
+}
+
+func TestDelivery_Node_Library_HasReleaseCreate(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: library\n")
+
+	if err := p.Init(project.Meta{Name: "my-lib", Template: "node-ts"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "gh release create")
+}
+
+func TestDelivery_Java_Library_NoMavenPackage(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: library\n")
+
+	if err := p.Init(project.Meta{Name: "mylib", Template: "java"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	if strings.Contains(content, "mvn") {
+		t.Error("library delivery should not contain 'mvn'")
+	}
+}
+
+func TestDelivery_Java_Library_HasReleaseCreate(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: library\n")
+
+	if err := p.Init(project.Meta{Name: "mylib", Template: "java"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "gh release create")
+	assertContains(t, content, "--generate-notes")
+}
+
+func TestDelivery_BinaryTrue_DefaultsToKindBinary(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "mycli", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "linux")
+	assertContains(t, content, "GOOS")
+}
+
 func TestDelivery_Idempotent(t *testing.T) {
 	dir, p := setup(t)
 	writeRC(t, dir, "github:\n  delivery: true\n")

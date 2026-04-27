@@ -22,17 +22,20 @@ const (
 //	github: true                       # CI workflow only
 //	github:
 //	  ci: true                         # CI workflow
-//	  release: true                    # release workflow
+//	  release: true                    # release workflow (goreleaser/v*-tags)
+//	  delivery: true                   # vergant-based CD workflow (binary, default)
+//	  delivery:
+//	    kind: library                  # vergant versioning + plain GitHub release, no artifacts
 //	  defaultBranch: "develop"         # branch CI triggers on (default: main)
 //
-// Workflow content is template-aware: Go templates use goreleaser, Java uses
-// Maven, Node uses npm. Unknown templates are ignored.
+// Workflow content is template-aware: Go templates cross-compile binaries,
+// Java builds and uploads JARs, Node publishes to npm. Unknown templates are ignored.
 type GitHubActionsPlugin struct{}
 
 func New() *GitHubActionsPlugin { return &GitHubActionsPlugin{} }
 
 func (p *GitHubActionsPlugin) Weave(meta project.Meta, rc map[string]any, stream *project.EventStream) error {
-	ci, release, delivery, branch := parseRC(rc)
+	ci, release, delivery, deliveryKind, branch := parseRC(rc)
 	if !ci && !release && !delivery {
 		return nil
 	}
@@ -71,7 +74,7 @@ func (p *GitHubActionsPlugin) Weave(meta project.Meta, rc map[string]any, stream
 	}
 
 	if delivery {
-		payload, err := json.Marshal(deliveryPayload(group, meta.Name))
+		payload, err := json.Marshal(deliveryPayload(group, meta.Name, deliveryKind))
 		if err != nil {
 			return fmt.Errorf("github plugin: delivery payload: %w", err)
 		}
@@ -87,15 +90,24 @@ func (p *GitHubActionsPlugin) Weave(meta project.Meta, rc map[string]any, stream
 	return nil
 }
 
-func parseRC(rc map[string]any) (ci, release, delivery bool, branch string) {
+func parseRC(rc map[string]any) (ci, release, delivery bool, deliveryKind, branch string) {
 	branch = "main"
+	deliveryKind = "binary"
 	switch v := rc["github"].(type) {
 	case bool:
 		ci = v
 	case map[string]any:
 		ci, _ = v["ci"].(bool)
 		release, _ = v["release"].(bool)
-		delivery, _ = v["delivery"].(bool)
+		switch d := v["delivery"].(type) {
+		case bool:
+			delivery = d
+		case map[string]any:
+			delivery = true
+			if k, ok := d["kind"].(string); ok && k != "" {
+				deliveryKind = k
+			}
+		}
 		if b, ok := v["defaultBranch"].(string); ok && b != "" {
 			branch = b
 		}
@@ -233,19 +245,24 @@ func releasePayload(group, template string) map[string]any {
 	return base
 }
 
-func deliveryPayload(group, name string) map[string]any {
+func deliveryPayload(group, name, kind string) map[string]any {
 	const (
-		configureGit  = "git config user.email \"github-actions[bot]@users.noreply.github.com\"\ngit config user.name \"github-actions[bot]\""
+		configureGit   = "git config user.email \"github-actions[bot]@users.noreply.github.com\"\ngit config user.name \"github-actions[bot]\""
 		installVergant = "go install github.com/forgant-foundry/vergant/cmd/vergant@latest"
-		applyVersion  = "echo \"tag=$(vergant new)\" >> $GITHUB_OUTPUT"
-		ifRelease     = "startsWith(steps.version.outputs.tag, 'r')"
-		createRelease = "VERSION=\"${{ steps.version.outputs.tag }}\"\ngh release create \"$VERSION\" --title \"${VERSION#r}\" --generate-notes dist/*"
+		applyVersion   = "echo \"tag=$(vergant new)\" >> $GITHUB_OUTPUT"
+		ifRelease      = "startsWith(steps.version.outputs.tag, 'r')"
 	)
 
 	versionStep := map[string]any{
 		"id":   "version",
 		"name": "Apply version",
 		"run":  applyVersion,
+	}
+	libraryReleaseStep := map[string]any{
+		"env":  map[string]any{"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"},
+		"if":   ifRelease,
+		"name": "Create release",
+		"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\ngh release create \"$VERSION\" --title \"${VERSION#r}\" --generate-notes",
 	}
 
 	var steps []any
@@ -258,17 +275,23 @@ func deliveryPayload(group, name string) map[string]any {
 			map[string]any{"name": "Configure git identity", "run": configureGit},
 			map[string]any{"name": "Install vergant", "run": installVergant},
 			versionStep,
-			map[string]any{
-				"if":   ifRelease,
-				"name": "Build release binaries",
-				"run":  goDeliveryBuildScript(name),
-			},
-			map[string]any{
-				"env":  map[string]any{"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"},
-				"if":   ifRelease,
-				"name": "Create release",
-				"run":  createRelease,
-			},
+		}
+		if kind == "library" {
+			steps = append(steps, libraryReleaseStep)
+		} else {
+			steps = append(steps,
+				map[string]any{
+					"if":   ifRelease,
+					"name": "Build release binaries",
+					"run":  goDeliveryBuildScript(name),
+				},
+				map[string]any{
+					"env":  map[string]any{"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"},
+					"if":   ifRelease,
+					"name": "Create release",
+					"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\ngh release create \"$VERSION\" --title \"${VERSION#r}\" --generate-notes dist/*",
+				},
+			)
 		}
 	case "node":
 		steps = []any{
@@ -282,13 +305,19 @@ func deliveryPayload(group, name string) map[string]any {
 			map[string]any{"name": "Configure git identity", "run": configureGit},
 			map[string]any{"name": "Install vergant", "run": installVergant},
 			versionStep,
-			map[string]any{"if": ifRelease, "name": "Build", "run": "npm run build"},
-			map[string]any{
-				"env":  map[string]any{"NODE_AUTH_TOKEN": "${{ secrets.NPM_TOKEN }}"},
-				"if":   ifRelease,
-				"name": "Publish",
-				"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\nSEM=\"${VERSION#r}\"\nnpm version \"$SEM\" --no-git-tag-version\nnpm publish",
-			},
+		}
+		if kind == "library" {
+			steps = append(steps, libraryReleaseStep)
+		} else {
+			steps = append(steps,
+				map[string]any{"if": ifRelease, "name": "Build", "run": "npm run build"},
+				map[string]any{
+					"env":  map[string]any{"NODE_AUTH_TOKEN": "${{ secrets.NPM_TOKEN }}"},
+					"if":   ifRelease,
+					"name": "Publish",
+					"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\nSEM=\"${VERSION#r}\"\nnpm version \"$SEM\" --no-git-tag-version\nnpm publish",
+				},
+			)
 		}
 	case "java":
 		steps = []any{
@@ -301,17 +330,23 @@ func deliveryPayload(group, name string) map[string]any {
 			map[string]any{"name": "Configure git identity", "run": configureGit},
 			map[string]any{"name": "Install vergant", "run": installVergant},
 			versionStep,
-			map[string]any{
-				"if":   ifRelease,
-				"name": "Build",
-				"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\nSEM=\"${VERSION#r}\"\nmvn --batch-mode versions:set -DnewVersion=\"$SEM\" -DgenerateBackupPoms=false\nmvn --batch-mode package -DskipTests",
-			},
-			map[string]any{
-				"env":  map[string]any{"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"},
-				"if":   ifRelease,
-				"name": "Create release",
-				"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\ngh release create \"$VERSION\" --title \"${VERSION#r}\" --generate-notes target/*.jar",
-			},
+		}
+		if kind == "library" {
+			steps = append(steps, libraryReleaseStep)
+		} else {
+			steps = append(steps,
+				map[string]any{
+					"if":   ifRelease,
+					"name": "Build",
+					"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\nSEM=\"${VERSION#r}\"\nmvn --batch-mode versions:set -DnewVersion=\"$SEM\" -DgenerateBackupPoms=false\nmvn --batch-mode package -DskipTests",
+				},
+				map[string]any{
+					"env":  map[string]any{"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"},
+					"if":   ifRelease,
+					"name": "Create release",
+					"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\ngh release create \"$VERSION\" --title \"${VERSION#r}\" --generate-notes target/*.jar",
+				},
+			)
 		}
 	}
 
