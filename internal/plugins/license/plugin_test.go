@@ -66,7 +66,7 @@ func TestLicense_MIT_DefaultYearIsCurrentYear(t *testing.T) {
 
 func TestLicense_MIT_YearFromRC(t *testing.T) {
 	dir, p := setup(t)
-	writeRC(t, dir, "license:\n  spdx: MIT\n  year: 2021\n")
+	writeRC(t, dir, "license:\n  id: MIT\n  year: 2021\n")
 
 	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func TestLicense_MIT_YearFromRC(t *testing.T) {
 
 func TestLicense_MIT_AuthorSubstituted(t *testing.T) {
 	dir, p := setup(t)
-	writeRC(t, dir, "license:\n  spdx: MIT\n  year: 2024\n  author: \"Acme Corp\"\n")
+	writeRC(t, dir, "license:\n  id: MIT\n  year: 2024\n  author: \"Acme Corp\"\n")
 
 	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
 		t.Fatal(err)
@@ -90,7 +90,7 @@ func TestLicense_MIT_AuthorSubstituted(t *testing.T) {
 
 func TestLicense_MIT_NoAuthor_NoTrailingSpace(t *testing.T) {
 	dir, p := setup(t)
-	writeRC(t, dir, "license:\n  spdx: MIT\n  year: 2024\n")
+	writeRC(t, dir, "license:\n  id: MIT\n  year: 2024\n")
 
 	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
 		t.Fatal(err)
@@ -150,7 +150,7 @@ func TestLicense_ISC_FileCreated(t *testing.T) {
 
 func TestLicense_ISC_AuthorSubstituted(t *testing.T) {
 	dir, p := setup(t)
-	writeRC(t, dir, "license:\n  spdx: ISC\n  year: 2024\n  author: \"Forgant Foundry\"\n")
+	writeRC(t, dir, "license:\n  id: ISC\n  year: 2024\n  author: \"Forgant Foundry\"\n")
 
 	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
 		t.Fatal(err)
@@ -217,7 +217,7 @@ func TestLicense_Custom_FileCreated(t *testing.T) {
 
 func TestLicense_Custom_CopyrightSubstituted(t *testing.T) {
 	dir, p := setupWith(t, licenseplugin.WithCustom("corp-v1", "Copyright (c) {{COPYRIGHT}}\n"))
-	writeRC(t, dir, "license:\n  spdx: corp-v1\n  year: 2023\n  author: \"Corp Inc\"\n")
+	writeRC(t, dir, "license:\n  id: corp-v1\n  year: 2023\n  author: \"Corp Inc\"\n")
 
 	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
 		t.Fatal(err)
@@ -312,7 +312,7 @@ func TestLicense_Absent_NoFile(t *testing.T) {
 
 func TestLicense_Idempotent(t *testing.T) {
 	dir, p := setup(t)
-	writeRC(t, dir, "license:\n  spdx: MIT\n  year: 2024\n  author: \"Acme Corp\"\n")
+	writeRC(t, dir, "license:\n  id: MIT\n  year: 2024\n  author: \"Acme Corp\"\n")
 	s := &noopSynth{}
 
 	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, s); err != nil {

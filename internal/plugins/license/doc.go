@@ -5,7 +5,7 @@
 //
 //	license: MIT                   # shorthand — current year, no author line
 //	license:
-//	  spdx: MIT
+//	  id: MIT
 //	  year: 2024
 //	  author: "Acme Corp"
 //

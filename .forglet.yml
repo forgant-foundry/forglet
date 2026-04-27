@@ -12,8 +12,9 @@ gitignore:
   - /forglet
 
 license:
-  spdx: MIT
+  id: MIT
   author: Forgant Foundry
 
 github:
-  delivery: true
+  delivery:
+    majorVersion: 1

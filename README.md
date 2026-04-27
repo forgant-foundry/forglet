@@ -158,7 +158,7 @@ github:
 
 license: MIT                           # LicensePlugin: managed LICENSE file (shorthand)
 license:                               # LicensePlugin: with year and copyright holder
-  spdx: Apache-2.0                     # MIT, Apache-2.0, GPL-3.0, AGPL-3.0, ISC
+  id: Apache-2.0                       # built-in: MIT, Apache-2.0, GPL-3.0, AGPL-3.0, ISC; or any custom name
   year: 2024
   author: "Acme Corp"
 ```
@@ -329,7 +329,7 @@ Projects managed by this binary then select the license in `.forglet.yml`:
 
 ```yaml
 license:
-  spdx: acme-proprietary
+  id: acme-proprietary
   year: 2024
   author: "Acme Corp"
 ```

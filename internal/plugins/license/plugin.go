@@ -121,7 +121,7 @@ func parseRC(rc map[string]any) (spdx, year, author string) {
 	case string:
 		spdx = v
 	case map[string]any:
-		spdx, _ = v["spdx"].(string)
+		spdx, _ = v["id"].(string)
 		switch y := v["year"].(type) {
 		case string:
 			if y != "" {
