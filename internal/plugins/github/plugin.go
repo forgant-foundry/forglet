@@ -84,7 +84,7 @@ func (p *GitHubActionsPlugin) Weave(meta project.Meta, rc map[string]any, stream
 	}
 
 	if delivery.enabled {
-		payload, err := json.Marshal(deliveryPayload(group, meta.Name, delivery.kind, delivery.mainPkg))
+		payload, err := json.Marshal(deliveryPayload(group, meta.Name, delivery.kind, delivery.mainPkg, delivery.versionVar))
 		if err != nil {
 			return fmt.Errorf("github plugin: delivery payload: %w", err)
 		}
@@ -120,6 +120,7 @@ type deliveryCfg struct {
 	enabled            bool
 	kind               string
 	mainPkg            string // Go main package path for binary builds; defaults to "."
+	versionVar         string // Full -X linker path for version injection (e.g. pkg/commands.Version)
 	majorVersion       int
 	defaultBranch      string
 	supportBranchRegEx string
@@ -151,6 +152,9 @@ func parseRC(rc map[string]any) (ci, release bool, delivery deliveryCfg, branch 
 			}
 			if m, ok := d["main"].(string); ok && m != "" {
 				delivery.mainPkg = m
+			}
+			if vv, ok := d["versionVar"].(string); ok && vv != "" {
+				delivery.versionVar = vv
 			}
 			if mv, ok := d["majorVersion"].(int); ok {
 				delivery.majorVersion = mv
@@ -308,7 +312,7 @@ func releasePayload(group, template string) map[string]any {
 	return base
 }
 
-func deliveryPayload(group, name, kind, mainPkg string) map[string]any {
+func deliveryPayload(group, name, kind, mainPkg, versionVar string) map[string]any {
 	const (
 		configureGit   = "git config user.email \"github-actions[bot]@users.noreply.github.com\"\ngit config user.name \"github-actions[bot]\""
 		installVergant = "go install github.com/forgant-foundry/vergant/cmd/vergant@latest"
@@ -346,7 +350,7 @@ func deliveryPayload(group, name, kind, mainPkg string) map[string]any {
 				map[string]any{
 					"if":   ifRelease,
 					"name": "Build release binaries",
-					"run":  goDeliveryBuildScript(name, mainPkg),
+					"run":  goDeliveryBuildScript(name, mainPkg, versionVar),
 				},
 				map[string]any{
 					"env":  map[string]any{"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"},
@@ -453,14 +457,18 @@ func vergantPayload(cfg deliveryCfg) map[string]any {
 	return m
 }
 
-func goDeliveryBuildScript(name, mainPkg string) string {
+func goDeliveryBuildScript(name, mainPkg, versionVar string) string {
 	if mainPkg == "" {
 		mainPkg = "."
+	}
+	ldflags := "-s -w"
+	if versionVar != "" {
+		ldflags = fmt.Sprintf("-s -w -X %s=${SEM}", versionVar)
 	}
 	return fmt.Sprintf(
 		`VERSION="${{ steps.version.outputs.tag }}"
 SEM="${VERSION#v}"
-LDFLAGS="-s -w"
+LDFLAGS="%[3]s"
 mkdir -p dist
 
 GOOS=linux  GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s %[2]s
@@ -475,7 +483,7 @@ tar czf "dist/%[1]s_${SEM}_darwin_arm64.tar.gz" -C /tmp %[1]s
 GOOS=windows GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s.exe %[2]s
 cd /tmp && zip "${GITHUB_WORKSPACE}/dist/%[1]s_${SEM}_windows_amd64.zip" %[1]s.exe && cd -
 
-cd dist && sha256sum *.tar.gz *.zip > "%[1]s_${SEM}_checksums.txt"`, name, mainPkg)
+cd dist && sha256sum *.tar.gz *.zip > "%[1]s_${SEM}_checksums.txt"`, name, mainPkg, ldflags)
 }
 
 func (p *GitHubActionsPlugin) RCSchema() project.SchemaContribution {
@@ -491,6 +499,10 @@ func (p *GitHubActionsPlugin) RCSchema() project.SchemaContribution {
 			"main": map[string]any{
 				"type":        "string",
 				"description": "Go main package path for binary builds (e.g. ./cmd/myapp). Default: \".\".",
+			},
+			"versionVar": map[string]any{
+				"type":        "string",
+				"description": "Full linker path for version injection (e.g. github.com/org/repo/cmd/app/commands.Version). Omit to skip version embedding.",
 			},
 			"majorVersion": map[string]any{
 				"type":        "integer",

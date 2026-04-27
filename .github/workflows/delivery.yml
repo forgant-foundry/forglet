@@ -27,7 +27,7 @@ jobs:
               run: |-
                 VERSION="${{ steps.version.outputs.tag }}"
                 SEM="${VERSION#v}"
-                LDFLAGS="-s -w"
+                LDFLAGS="-s -w -X github.com/forgant-foundry/forglet/cmd/forglet/commands.Version=${SEM}"
                 mkdir -p dist
 
                 GOOS=linux  GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/forglet ./cmd/forglet

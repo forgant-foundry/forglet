@@ -19,3 +19,4 @@ github:
   delivery:
     kind: binary
     main: ./cmd/forglet
+    versionVar: github.com/forgant-foundry/forglet/cmd/forglet/commands.Version

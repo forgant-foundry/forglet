@@ -348,6 +348,32 @@ func TestDelivery_Go_HasCrossCompilation(t *testing.T) {
 	assertContains(t, content, "windows")
 }
 
+func TestDelivery_Go_VersionVarInjected(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n    versionVar: github.com/org/myapp/cmd/myapp/commands.Version\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "-X github.com/org/myapp/cmd/myapp/commands.Version=${SEM}")
+}
+
+func TestDelivery_Go_NoVersionVarByDefault(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	if strings.Contains(content, "-X ") {
+		t.Error("expected no -X linker flag when versionVar is not set")
+	}
+}
+
 func TestDelivery_Go_TriggerOnAllBranches(t *testing.T) {
 	dir, p := setup(t)
 	writeRC(t, dir, "github:\n  delivery: true\n")
