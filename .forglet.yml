@@ -17,6 +17,5 @@ license:
 
 github:
   delivery:
-    majorVersion: 1
     kind: binary
     main: ./cmd/forglet
