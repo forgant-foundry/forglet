@@ -313,7 +313,7 @@ func deliveryPayload(group, name, kind, mainPkg string) map[string]any {
 		configureGit   = "git config user.email \"github-actions[bot]@users.noreply.github.com\"\ngit config user.name \"github-actions[bot]\""
 		installVergant = "go install github.com/forgant-foundry/vergant/cmd/vergant@latest"
 		applyVersion   = "echo \"tag=$(vergant new)\" >> $GITHUB_OUTPUT"
-		ifRelease      = "startsWith(steps.version.outputs.tag, 'r')"
+		ifRelease      = "startsWith(steps.version.outputs.tag, 'v')"
 	)
 
 	versionStep := map[string]any{
@@ -325,7 +325,7 @@ func deliveryPayload(group, name, kind, mainPkg string) map[string]any {
 		"env":  map[string]any{"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"},
 		"if":   ifRelease,
 		"name": "Create release",
-		"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\ngh release create \"$VERSION\" --title \"${VERSION#r}\" --generate-notes",
+		"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\ngh release create \"$VERSION\" --title \"${VERSION#v}\" --generate-notes",
 	}
 
 	var steps []any
@@ -352,7 +352,7 @@ func deliveryPayload(group, name, kind, mainPkg string) map[string]any {
 					"env":  map[string]any{"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"},
 					"if":   ifRelease,
 					"name": "Create release",
-					"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\ngh release create \"$VERSION\" --title \"${VERSION#r}\" --generate-notes dist/*",
+					"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\ngh release create \"$VERSION\" --title \"${VERSION#v}\" --generate-notes dist/*",
 				},
 			)
 		}
@@ -378,7 +378,7 @@ func deliveryPayload(group, name, kind, mainPkg string) map[string]any {
 					"env":  map[string]any{"NODE_AUTH_TOKEN": "${{ secrets.NPM_TOKEN }}"},
 					"if":   ifRelease,
 					"name": "Publish",
-					"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\nSEM=\"${VERSION#r}\"\nnpm version \"$SEM\" --no-git-tag-version\nnpm publish",
+					"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\nSEM=\"${VERSION#v}\"\nnpm version \"$SEM\" --no-git-tag-version\nnpm publish",
 				},
 			)
 		}
@@ -401,13 +401,13 @@ func deliveryPayload(group, name, kind, mainPkg string) map[string]any {
 				map[string]any{
 					"if":   ifRelease,
 					"name": "Build",
-					"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\nSEM=\"${VERSION#r}\"\nmvn --batch-mode versions:set -DnewVersion=\"$SEM\" -DgenerateBackupPoms=false\nmvn --batch-mode package -DskipTests",
+					"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\nSEM=\"${VERSION#v}\"\nmvn --batch-mode versions:set -DnewVersion=\"$SEM\" -DgenerateBackupPoms=false\nmvn --batch-mode package -DskipTests",
 				},
 				map[string]any{
 					"env":  map[string]any{"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"},
 					"if":   ifRelease,
 					"name": "Create release",
-					"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\ngh release create \"$VERSION\" --title \"${VERSION#r}\" --generate-notes target/*.jar",
+					"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\ngh release create \"$VERSION\" --title \"${VERSION#v}\" --generate-notes target/*.jar",
 				},
 			)
 		}
@@ -459,7 +459,7 @@ func goDeliveryBuildScript(name, mainPkg string) string {
 	}
 	return fmt.Sprintf(
 		`VERSION="${{ steps.version.outputs.tag }}"
-SEM="${VERSION#r}"
+SEM="${VERSION#v}"
 LDFLAGS="-s -w"
 mkdir -p dist
 

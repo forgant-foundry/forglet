@@ -22,11 +22,11 @@ jobs:
             - id: version
               name: Apply version
               run: echo "tag=$(vergant new)" >> $GITHUB_OUTPUT
-            - if: startsWith(steps.version.outputs.tag, 'r')
+            - if: startsWith(steps.version.outputs.tag, 'v')
               name: Build release binaries
               run: |-
                 VERSION="${{ steps.version.outputs.tag }}"
-                SEM="${VERSION#r}"
+                SEM="${VERSION#v}"
                 LDFLAGS="-s -w"
                 mkdir -p dist
 
@@ -45,11 +45,11 @@ jobs:
                 cd dist && sha256sum *.tar.gz *.zip > "forglet_${SEM}_checksums.txt"
             - env:
                 GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              if: startsWith(steps.version.outputs.tag, 'r')
+              if: startsWith(steps.version.outputs.tag, 'v')
               name: Create release
               run: |-
                 VERSION="${{ steps.version.outputs.tag }}"
-                gh release create "$VERSION" --title "${VERSION#r}" --generate-notes dist/*
+                gh release create "$VERSION" --title "${VERSION#v}" --generate-notes dist/*
 name: delivery
 "on":
     push:
