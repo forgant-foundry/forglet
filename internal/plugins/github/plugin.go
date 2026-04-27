@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	ciFile      = ".github/workflows/ci.yml"
-	releaseFile = ".github/workflows/release.yml"
+	ciFile       = ".github/workflows/ci.yml"
+	releaseFile  = ".github/workflows/release.yml"
+	deliveryFile = ".github/workflows/delivery.yml"
 )
 
 // GitHubActionsPlugin synthesizes GitHub Actions workflow files.
@@ -31,8 +32,8 @@ type GitHubActionsPlugin struct{}
 func New() *GitHubActionsPlugin { return &GitHubActionsPlugin{} }
 
 func (p *GitHubActionsPlugin) Weave(meta project.Meta, rc map[string]any, stream *project.EventStream) error {
-	ci, release, branch := parseRC(rc)
-	if !ci && !release {
+	ci, release, delivery, branch := parseRC(rc)
+	if !ci && !release && !delivery {
 		return nil
 	}
 
@@ -69,10 +70,24 @@ func (p *GitHubActionsPlugin) Weave(meta project.Meta, rc map[string]any, stream
 		})
 	}
 
+	if delivery {
+		payload, err := json.Marshal(deliveryPayload(group, meta.Name))
+		if err != nil {
+			return fmt.Errorf("github plugin: delivery payload: %w", err)
+		}
+		stream.SetFormat(deliveryFile, project.FormatYAML)
+		stream.Append(deliveryFile, eventing.Event{
+			ID:      newID(),
+			Type:    "github.delivery.configured",
+			Seq:     1,
+			Payload: json.RawMessage(payload),
+		})
+	}
+
 	return nil
 }
 
-func parseRC(rc map[string]any) (ci, release bool, branch string) {
+func parseRC(rc map[string]any) (ci, release, delivery bool, branch string) {
 	branch = "main"
 	switch v := rc["github"].(type) {
 	case bool:
@@ -80,6 +95,7 @@ func parseRC(rc map[string]any) (ci, release bool, branch string) {
 	case map[string]any:
 		ci, _ = v["ci"].(bool)
 		release, _ = v["release"].(bool)
+		delivery, _ = v["delivery"].(bool)
 		if b, ok := v["defaultBranch"].(string); ok && b != "" {
 			branch = b
 		}
@@ -215,6 +231,123 @@ func releasePayload(group, template string) map[string]any {
 		"release": map[string]any{"runs-on": "ubuntu-latest", "steps": steps},
 	}
 	return base
+}
+
+func deliveryPayload(group, name string) map[string]any {
+	const (
+		configureGit  = "git config user.email \"github-actions[bot]@users.noreply.github.com\"\ngit config user.name \"github-actions[bot]\""
+		installVergant = "go install github.com/forgant-foundry/vergant/cmd/vergant@latest"
+		applyVersion  = "echo \"tag=$(vergant new)\" >> $GITHUB_OUTPUT"
+		ifRelease     = "startsWith(steps.version.outputs.tag, 'r')"
+		createRelease = "VERSION=\"${{ steps.version.outputs.tag }}\"\ngh release create \"$VERSION\" --title \"${VERSION#r}\" --generate-notes dist/*"
+	)
+
+	versionStep := map[string]any{
+		"id":   "version",
+		"name": "Apply version",
+		"run":  applyVersion,
+	}
+
+	var steps []any
+	switch group {
+	case "go":
+		steps = []any{
+			map[string]any{"uses": "actions/checkout@v4", "with": map[string]any{"fetch-depth": 0}},
+			map[string]any{"uses": "actions/setup-go@v5", "with": map[string]any{"go-version-file": "go.mod"}},
+			map[string]any{"name": "Download dependencies", "run": "go mod download"},
+			map[string]any{"name": "Configure git identity", "run": configureGit},
+			map[string]any{"name": "Install vergant", "run": installVergant},
+			versionStep,
+			map[string]any{
+				"if":   ifRelease,
+				"name": "Build release binaries",
+				"run":  goDeliveryBuildScript(name),
+			},
+			map[string]any{
+				"env":  map[string]any{"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"},
+				"if":   ifRelease,
+				"name": "Create release",
+				"run":  createRelease,
+			},
+		}
+	case "node":
+		steps = []any{
+			map[string]any{"uses": "actions/checkout@v4", "with": map[string]any{"fetch-depth": 0}},
+			map[string]any{
+				"uses": "actions/setup-node@v4",
+				"with": map[string]any{"node-version": "22", "cache": "npm", "registry-url": "https://registry.npmjs.org"},
+			},
+			map[string]any{"uses": "actions/setup-go@v5", "with": map[string]any{"go-version": "stable"}},
+			map[string]any{"name": "Install dependencies", "run": "npm ci"},
+			map[string]any{"name": "Configure git identity", "run": configureGit},
+			map[string]any{"name": "Install vergant", "run": installVergant},
+			versionStep,
+			map[string]any{"if": ifRelease, "name": "Build", "run": "npm run build"},
+			map[string]any{
+				"env":  map[string]any{"NODE_AUTH_TOKEN": "${{ secrets.NPM_TOKEN }}"},
+				"if":   ifRelease,
+				"name": "Publish",
+				"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\nSEM=\"${VERSION#r}\"\nnpm version \"$SEM\" --no-git-tag-version\nnpm publish",
+			},
+		}
+	case "java":
+		steps = []any{
+			map[string]any{"uses": "actions/checkout@v4", "with": map[string]any{"fetch-depth": 0}},
+			map[string]any{
+				"uses": "actions/setup-java@v4",
+				"with": map[string]any{"java-version": "21", "distribution": "temurin", "cache": "maven"},
+			},
+			map[string]any{"uses": "actions/setup-go@v5", "with": map[string]any{"go-version": "stable"}},
+			map[string]any{"name": "Configure git identity", "run": configureGit},
+			map[string]any{"name": "Install vergant", "run": installVergant},
+			versionStep,
+			map[string]any{
+				"if":   ifRelease,
+				"name": "Build",
+				"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\nSEM=\"${VERSION#r}\"\nmvn --batch-mode versions:set -DnewVersion=\"$SEM\" -DgenerateBackupPoms=false\nmvn --batch-mode package -DskipTests",
+			},
+			map[string]any{
+				"env":  map[string]any{"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"},
+				"if":   ifRelease,
+				"name": "Create release",
+				"run":  "VERSION=\"${{ steps.version.outputs.tag }}\"\ngh release create \"$VERSION\" --title \"${VERSION#r}\" --generate-notes target/*.jar",
+			},
+		}
+	}
+
+	return map[string]any{
+		"name": "delivery",
+		"on":   map[string]any{"push": map[string]any{"branches": []any{"**"}}},
+		"jobs": map[string]any{
+			"delivery": map[string]any{
+				"runs-on":     "ubuntu-latest",
+				"permissions": map[string]any{"contents": "write"},
+				"steps":       steps,
+			},
+		},
+	}
+}
+
+func goDeliveryBuildScript(name string) string {
+	return fmt.Sprintf(
+		`VERSION="${{ steps.version.outputs.tag }}"
+SEM="${VERSION#r}"
+LDFLAGS="-s -w"
+mkdir -p dist
+
+GOOS=linux  GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s .
+tar czf "dist/%[1]s_${SEM}_linux_amd64.tar.gz" -C /tmp %[1]s
+
+GOOS=darwin GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s .
+tar czf "dist/%[1]s_${SEM}_darwin_amd64.tar.gz" -C /tmp %[1]s
+
+GOOS=darwin GOARCH=arm64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s .
+tar czf "dist/%[1]s_${SEM}_darwin_arm64.tar.gz" -C /tmp %[1]s
+
+GOOS=windows GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s.exe .
+cd /tmp && zip "${GITHUB_WORKSPACE}/dist/%[1]s_${SEM}_windows_amd64.zip" %[1]s.exe && cd -
+
+cd dist && sha256sum *.tar.gz *.zip > "%[1]s_${SEM}_checksums.txt"`, name)
 }
 
 func newID() string {

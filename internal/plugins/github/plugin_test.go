@@ -295,6 +295,235 @@ func TestGitHubActions_Idempotent(t *testing.T) {
 	}
 }
 
+// ---- Delivery workflow -----------------------------------------------------------
+
+func TestDelivery_Go_WorkflowCreated(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".github", "workflows", "delivery.yml")); err != nil {
+		t.Errorf("delivery.yml not created: %v", err)
+	}
+}
+
+func TestDelivery_Go_HasVergant(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "vergant")
+}
+
+func TestDelivery_Go_UsesBinaryName(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "mycli", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "mycli")
+}
+
+func TestDelivery_Go_HasCrossCompilation(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "linux")
+	assertContains(t, content, "darwin")
+	assertContains(t, content, "windows")
+}
+
+func TestDelivery_Go_TriggerOnAllBranches(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "**")
+}
+
+func TestDelivery_Node_WorkflowCreated(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "my-app", Template: "node-ts"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".github", "workflows", "delivery.yml")); err != nil {
+		t.Errorf("delivery.yml not created: %v", err)
+	}
+}
+
+func TestDelivery_Node_HasVergant(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "my-app", Template: "node-ts"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "vergant")
+}
+
+func TestDelivery_Node_HasNpmPublish(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "my-app", Template: "node-ts"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "npm publish")
+	assertContains(t, content, "NPM_TOKEN")
+}
+
+func TestDelivery_Node_HasNpmVersion(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "my-app", Template: "node-ts"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "npm version")
+}
+
+func TestDelivery_Java_WorkflowCreated(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myservice", Template: "java"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".github", "workflows", "delivery.yml")); err != nil {
+		t.Errorf("delivery.yml not created: %v", err)
+	}
+}
+
+func TestDelivery_Java_HasVergant(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myservice", Template: "java"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "vergant")
+}
+
+func TestDelivery_Java_HasMavenBuild(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myservice", Template: "java"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "mvn")
+	assertContains(t, content, "package")
+	assertContains(t, content, "versions:set")
+}
+
+func TestDelivery_DeliveryOnly_NoCIWorkflow(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".github", "workflows", "ci.yml")); !os.IsNotExist(err) {
+		t.Error("ci.yml should not be created when only delivery: true is set")
+	}
+}
+
+func TestDelivery_WorkflowReadOnly(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Stat(filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0444 {
+		t.Errorf("delivery.yml mode = %04o, want 0444", info.Mode().Perm())
+	}
+}
+
+func TestDelivery_WorkflowHasMarker(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "forglet")
+}
+
+func TestDelivery_GithubTrue_NoDeliveryWorkflow(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".github", "workflows", "delivery.yml")); !os.IsNotExist(err) {
+		t.Error("delivery.yml should not be created by 'github: true' shorthand")
+	}
+}
+
+func TestDelivery_Idempotent(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+	s := &noopSynth{}
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, s); err != nil {
+		t.Fatal(err)
+	}
+	first := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+
+	if err := p.Synthesize(s); err != nil {
+		t.Fatal(err)
+	}
+	second := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+
+	if first != second {
+		t.Errorf("delivery.yml changed after second synth:\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+}
+
 // ---- helpers ---------------------------------------------------------------------
 
 func setup(t *testing.T) (string, *project.Project) {
