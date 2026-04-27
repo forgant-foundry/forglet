@@ -107,6 +107,11 @@ func (p *Project) Init(meta Meta, s Synthesizer) error {
 	if err := p.Synthesize(s); err != nil {
 		return err
 	}
+	if sc, ok := s.(Scaffolder); ok {
+		if err := sc.Scaffold(p.root, meta); err != nil {
+			return err
+		}
+	}
 	for _, plugin := range p.plugins {
 		if sc, ok := plugin.(Scaffolder); ok {
 			if err := sc.Scaffold(p.root, meta); err != nil {

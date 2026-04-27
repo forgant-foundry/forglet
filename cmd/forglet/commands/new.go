@@ -16,7 +16,7 @@ var synthesizers = map[string]project.Synthesizer{
 	"go":                 goproj.NewFlat(),
 	"go-workspace":       goproj.NewWorkspace(),
 	"go-lambda":          goproj.NewLambda(),
-	"go-knative":         goproj.NewKnativeFunc(),
+	"go-knative":         goproj.NewGoKnative(),
 	"java":               java.NewFlat(),
 	"java-multimodule":   java.NewMultimodule(),
 	"java-lambda":        java.NewLambda(),

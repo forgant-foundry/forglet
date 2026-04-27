@@ -277,6 +277,183 @@ func TestGoPlugin_Scaffold_DockerfileNotOverwritten(t *testing.T) {
 	}
 }
 
+func TestGoPlugin_Weave_ContributesToFuncYAML(t *testing.T) {
+	stream := project.NewEventStream(nil)
+	knative.NewGo().Weave(project.Meta{Name: "my-func"}, nil, stream)
+	if len(stream.Events()["func.yaml"]) == 0 {
+		t.Error("expected events for func.yaml")
+	}
+}
+
+func TestGoPlugin_Weave_FuncYAML_NameFromMeta(t *testing.T) {
+	stream := project.NewEventStream(nil)
+	knative.NewGo().Weave(project.Meta{Name: "my-func"}, nil, stream)
+	agg := applyEvents(t, stream.Events()["func.yaml"])
+	b, _ := agg.ToYAML()
+	if !strings.Contains(string(b), "my-func") {
+		t.Errorf("func.yaml must contain meta.Name; got:\n%s", b)
+	}
+}
+
+func TestGoPlugin_Weave_FuncYAML_RuntimeIsGo(t *testing.T) {
+	stream := project.NewEventStream(nil)
+	knative.NewGo().Weave(project.Meta{Name: "my-func"}, nil, stream)
+	agg := applyEvents(t, stream.Events()["func.yaml"])
+	n, ok := agg.Node("runtime")
+	if !ok {
+		t.Fatal("no runtime node in func.yaml aggregate")
+	}
+	if n.Value.(string) != "go" {
+		t.Errorf("runtime = %q, want go", n.Value)
+	}
+}
+
+func TestGoPlugin_Weave_FuncYAML_SpecVersionSet(t *testing.T) {
+	stream := project.NewEventStream(nil)
+	knative.NewGo().Weave(project.Meta{Name: "my-func"}, nil, stream)
+	agg := applyEvents(t, stream.Events()["func.yaml"])
+	n, ok := agg.Node("specVersion")
+	if !ok || n.Value.(string) == "" {
+		t.Error("specVersion must be set in func.yaml")
+	}
+}
+
+func TestGoPlugin_Weave_FuncYAML_RCNameOverride(t *testing.T) {
+	stream := project.NewEventStream(nil)
+	knative.NewGo().Weave(project.Meta{Name: "my-func"}, map[string]any{"name": "custom-name"}, stream)
+	agg := applyEvents(t, stream.Events()["func.yaml"])
+	n, _ := agg.Node("name")
+	if n.Value.(string) != "custom-name" {
+		t.Errorf("name = %q, want custom-name", n.Value)
+	}
+}
+
+func TestGoPlugin_Weave_FuncYAML_RCRegistryOverride(t *testing.T) {
+	stream := project.NewEventStream(nil)
+	knative.NewGo().Weave(project.Meta{Name: "my-func"}, map[string]any{"registry": "gcr.io/myproject"}, stream)
+	agg := applyEvents(t, stream.Events()["func.yaml"])
+	n, _ := agg.Node("registry")
+	if n.Value.(string) != "gcr.io/myproject" {
+		t.Errorf("registry = %q, want gcr.io/myproject", n.Value)
+	}
+}
+
+func TestGoPlugin_Scaffold_WritesHandleGo(t *testing.T) {
+	dir := testutil.TempDir(t)
+	knative.NewGo().Scaffold(dir, project.Meta{Name: "my-func"})
+	content, err := os.ReadFile(filepath.Join(dir, "handle.go"))
+	if err != nil {
+		t.Fatalf("handle.go not created: %v", err)
+	}
+	if !strings.Contains(string(content), "func Handle") {
+		t.Error("handle.go must define func Handle")
+	}
+}
+
+func TestGoPlugin_Scaffold_WritesMainGo(t *testing.T) {
+	dir := testutil.TempDir(t)
+	knative.NewGo().Scaffold(dir, project.Meta{Name: "my-func"})
+	content, err := os.ReadFile(filepath.Join(dir, "main.go"))
+	if err != nil {
+		t.Fatalf("main.go not created: %v", err)
+	}
+	if !strings.Contains(string(content), "http.HandleFunc") || !strings.Contains(string(content), "PORT") {
+		t.Error("main.go must contain HTTP server wiring")
+	}
+}
+
+func TestGoPlugin_Scaffold_WritesHandleTestGo(t *testing.T) {
+	dir := testutil.TempDir(t)
+	knative.NewGo().Scaffold(dir, project.Meta{Name: "my-func"})
+	content, err := os.ReadFile(filepath.Join(dir, "handle_test.go"))
+	if err != nil {
+		t.Fatalf("handle_test.go not created: %v", err)
+	}
+	if !strings.Contains(string(content), "TestHandle") {
+		t.Error("handle_test.go must contain TestHandle")
+	}
+}
+
+func TestGoPlugin_Scaffold_HandleGoNotOverwritten(t *testing.T) {
+	dir := testutil.TempDir(t)
+	p := knative.NewGo()
+	p.Scaffold(dir, project.Meta{Name: "my-func"})
+	custom := []byte("// custom\n")
+	os.WriteFile(filepath.Join(dir, "handle.go"), custom, 0644)
+	p.Scaffold(dir, project.Meta{Name: "my-func"})
+	got, _ := os.ReadFile(filepath.Join(dir, "handle.go"))
+	if string(got) != string(custom) {
+		t.Error("handle.go must not be overwritten on second Scaffold call")
+	}
+}
+
+// ============================================================
+// Integration — Go Knative func.yaml
+// ============================================================
+
+func TestGoKnative_Integration_FuncYamlExists(t *testing.T) {
+	dir := testutil.TempDir(t)
+	if err := goKnativeProject(dir).Init(project.Meta{Name: "my-func", Template: "go-knative"}, golang.NewGoKnative()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "func.yaml")); err != nil {
+		t.Errorf("func.yaml not written: %v", err)
+	}
+}
+
+func TestGoKnative_Integration_FuncYamlContent(t *testing.T) {
+	dir := testutil.TempDir(t)
+	goKnativeProject(dir).Init(project.Meta{Name: "my-func", Template: "go-knative"}, golang.NewGoKnative())
+	b, _ := os.ReadFile(filepath.Join(dir, "func.yaml"))
+	for _, want := range []string{"name:", "my-func", "runtime:", "go", "specVersion:"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("func.yaml missing %q", want)
+		}
+	}
+}
+
+func TestGoKnative_Integration_FuncYamlReadOnly(t *testing.T) {
+	dir := testutil.TempDir(t)
+	goKnativeProject(dir).Init(project.Meta{Name: "my-func", Template: "go-knative"}, golang.NewGoKnative())
+	info, err := os.Stat(filepath.Join(dir, "func.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0444 {
+		t.Errorf("func.yaml mode = %04o, want 0444", info.Mode().Perm())
+	}
+}
+
+func TestGoKnative_Integration_FuncYamlHasMarker(t *testing.T) {
+	dir := testutil.TempDir(t)
+	goKnativeProject(dir).Init(project.Meta{Name: "my-func", Template: "go-knative"}, golang.NewGoKnative())
+	b, _ := os.ReadFile(filepath.Join(dir, "func.yaml"))
+	if !strings.HasPrefix(string(b), "# ") || !strings.Contains(string(b), "forglet") {
+		t.Error("func.yaml must start with forglet managed comment")
+	}
+}
+
+func TestGoKnative_Integration_HandleGoScaffolded(t *testing.T) {
+	dir := testutil.TempDir(t)
+	goKnativeProject(dir).Init(project.Meta{Name: "my-func", Template: "go-knative"}, golang.NewGoKnative())
+	content, err := os.ReadFile(filepath.Join(dir, "handle.go"))
+	if err != nil {
+		t.Fatalf("handle.go not created: %v", err)
+	}
+	if !strings.Contains(string(content), "func Handle") {
+		t.Error("handle.go must define func Handle")
+	}
+}
+
+func TestGoKnative_Integration_MainGoHasHTTPServer(t *testing.T) {
+	dir := testutil.TempDir(t)
+	goKnativeProject(dir).Init(project.Meta{Name: "my-func", Template: "go-knative"}, golang.NewGoKnative())
+	content, _ := os.ReadFile(filepath.Join(dir, "main.go"))
+	if !strings.Contains(string(content), "http.HandleFunc") {
+		t.Error("main.go must contain HTTP server wiring")
+	}
+}
+
 // ============================================================
 // Integration — Node Knative (New + NewNode)
 // ============================================================
@@ -382,7 +559,7 @@ func TestNodeKnative_Integration_DockerfileNotTouchedOnResynth(t *testing.T) {
 
 func TestGoKnative_Integration_ServiceYAMLExists(t *testing.T) {
 	dir := testutil.TempDir(t)
-	if err := goKnativeProject(dir).Init(project.Meta{Name: "my-svc", Template: "go"}, golang.NewFlat()); err != nil {
+	if err := goKnativeProject(dir).Init(project.Meta{Name: "my-svc", Template: "go-knative"}, golang.NewGoKnative()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".knative", "service.yaml")); err != nil {
@@ -392,7 +569,7 @@ func TestGoKnative_Integration_ServiceYAMLExists(t *testing.T) {
 
 func TestGoKnative_Integration_ServiceYAMLContent(t *testing.T) {
 	dir := testutil.TempDir(t)
-	goKnativeProject(dir).Init(project.Meta{Name: "my-svc", Template: "go"}, golang.NewFlat())
+	goKnativeProject(dir).Init(project.Meta{Name: "my-svc", Template: "go-knative"}, golang.NewGoKnative())
 	b, _ := os.ReadFile(filepath.Join(dir, ".knative", "service.yaml"))
 	for _, want := range []string{"serving.knative.dev/v1", "kind: Service", "name: my-svc", "my-svc:latest"} {
 		if !strings.Contains(string(b), want) {
@@ -403,7 +580,7 @@ func TestGoKnative_Integration_ServiceYAMLContent(t *testing.T) {
 
 func TestGoKnative_Integration_DockerfileExists(t *testing.T) {
 	dir := testutil.TempDir(t)
-	goKnativeProject(dir).Init(project.Meta{Name: "my-svc", Template: "go"}, golang.NewFlat())
+	goKnativeProject(dir).Init(project.Meta{Name: "my-svc", Template: "go-knative"}, golang.NewGoKnative())
 	if _, err := os.Stat(filepath.Join(dir, "Dockerfile")); err != nil {
 		t.Errorf("Dockerfile not created: %v", err)
 	}
@@ -411,7 +588,7 @@ func TestGoKnative_Integration_DockerfileExists(t *testing.T) {
 
 func TestGoKnative_Integration_DockerfileIsGoBased(t *testing.T) {
 	dir := testutil.TempDir(t)
-	goKnativeProject(dir).Init(project.Meta{Name: "my-svc", Template: "go"}, golang.NewFlat())
+	goKnativeProject(dir).Init(project.Meta{Name: "my-svc", Template: "go-knative"}, golang.NewGoKnative())
 	b, _ := os.ReadFile(filepath.Join(dir, "Dockerfile"))
 	if !strings.Contains(string(b), "golang:") {
 		t.Error("Go Knative Dockerfile must use golang: base image")
@@ -420,7 +597,7 @@ func TestGoKnative_Integration_DockerfileIsGoBased(t *testing.T) {
 
 func TestGoKnative_Integration_DockerignoreHasGit(t *testing.T) {
 	dir := testutil.TempDir(t)
-	goKnativeProject(dir).Init(project.Meta{Name: "my-svc", Template: "go"}, golang.NewFlat())
+	goKnativeProject(dir).Init(project.Meta{Name: "my-svc", Template: "go-knative"}, golang.NewGoKnative())
 	b, _ := os.ReadFile(filepath.Join(dir, ".dockerignore"))
 	if !strings.Contains(string(b), ".git") {
 		t.Error(".dockerignore must contain .git")
@@ -429,7 +606,7 @@ func TestGoKnative_Integration_DockerignoreHasGit(t *testing.T) {
 
 func TestGoKnative_Integration_NoPackageJSON(t *testing.T) {
 	dir := testutil.TempDir(t)
-	goKnativeProject(dir).Init(project.Meta{Name: "my-svc", Template: "go"}, golang.NewFlat())
+	goKnativeProject(dir).Init(project.Meta{Name: "my-svc", Template: "go-knative"}, golang.NewGoKnative())
 	if _, err := os.Stat(filepath.Join(dir, "package.json")); err == nil {
 		t.Error("Go Knative project must not have a package.json")
 	}
@@ -438,21 +615,26 @@ func TestGoKnative_Integration_NoPackageJSON(t *testing.T) {
 func TestGoKnative_Integration_Idempotent(t *testing.T) {
 	dir := testutil.TempDir(t)
 	proj := goKnativeProject(dir)
-	s := golang.NewFlat()
-	proj.Init(project.Meta{Name: "my-svc", Template: "go"}, s)
+	s := golang.NewGoKnative()
+	proj.Init(project.Meta{Name: "my-svc", Template: "go-knative"}, s)
 	svc1, _ := os.ReadFile(filepath.Join(dir, ".knative", "service.yaml"))
+	funcYaml1, _ := os.ReadFile(filepath.Join(dir, "func.yaml"))
 	proj.Synthesize(s)
 	svc2, _ := os.ReadFile(filepath.Join(dir, ".knative", "service.yaml"))
+	funcYaml2, _ := os.ReadFile(filepath.Join(dir, "func.yaml"))
 	if string(svc1) != string(svc2) {
 		t.Error("service.yaml changed on re-synth")
+	}
+	if string(funcYaml1) != string(funcYaml2) {
+		t.Error("func.yaml changed on re-synth")
 	}
 }
 
 func TestGoKnative_Integration_DockerfileNotTouchedOnResynth(t *testing.T) {
 	dir := testutil.TempDir(t)
 	proj := goKnativeProject(dir)
-	s := golang.NewFlat()
-	proj.Init(project.Meta{Name: "my-svc", Template: "go"}, s)
+	s := golang.NewGoKnative()
+	proj.Init(project.Meta{Name: "my-svc", Template: "go-knative"}, s)
 	custom := []byte("# custom\n")
 	os.WriteFile(filepath.Join(dir, "Dockerfile"), custom, 0644)
 	proj.Synthesize(s)
