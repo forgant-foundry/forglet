@@ -478,6 +478,71 @@ cd /tmp && zip "${GITHUB_WORKSPACE}/dist/%[1]s_${SEM}_windows_amd64.zip" %[1]s.e
 cd dist && sha256sum *.tar.gz *.zip > "%[1]s_${SEM}_checksums.txt"`, name, mainPkg)
 }
 
+func (p *GitHubActionsPlugin) RCSchema() project.SchemaContribution {
+	deliveryShape := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"kind": map[string]any{
+				"type":        "string",
+				"enum":        []any{"library", "binary"},
+				"description": "library: vergant versioning + plain GitHub release, no artifacts (default). binary: cross-compile + upload artifacts.",
+				"default":     "library",
+			},
+			"main": map[string]any{
+				"type":        "string",
+				"description": "Go main package path for binary builds (e.g. ./cmd/myapp). Default: \".\".",
+			},
+			"majorVersion": map[string]any{
+				"type":        "integer",
+				"description": "Current major version written to .vergant.yml.",
+			},
+			"defaultBranch": map[string]any{
+				"type":        "string",
+				"description": "Trunk branch for .vergant.yml versioning. Default: main.",
+			},
+			"supportBranchRegEx": map[string]any{
+				"type":        "string",
+				"description": "Support/maintenance branch pattern for .vergant.yml (e.g. ^release/.*).",
+			},
+			"devBranchRegEx": map[string]any{
+				"type":        "string",
+				"description": "Dev/pre-release branch pattern for .vergant.yml (e.g. ^feature/(.+)$).",
+			},
+			"patchBranchRegEx": map[string]any{
+				"type":        "string",
+				"description": "Patch/hotfix branch pattern for .vergant.yml (e.g. ^hotfix/(.+)$).",
+			},
+			"mode": map[string]any{
+				"type":        "string",
+				"enum":        []any{"release", "candidate"},
+				"description": "vergant versioning mode. Default: release.",
+			},
+		},
+	}
+	return project.SchemaContribution{
+		Properties: map[string]any{
+			"github": map[string]any{
+				"description": "GitHub Actions workflow generation.",
+				"oneOf": []any{
+					map[string]any{"type": "boolean", "description": "true enables CI workflow only."},
+					map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"ci":            map[string]any{"type": "boolean", "description": "Generate .github/workflows/ci.yml."},
+							"release":       map[string]any{"type": "boolean", "description": "Generate .github/workflows/release.yml (goreleaser, v*-tags)."},
+							"defaultBranch": map[string]any{"type": "string", "description": "CI trigger branch. Default: main."},
+							"delivery": map[string]any{
+								"description": "Generate .github/workflows/delivery.yml + .vergant.yml.",
+								"oneOf":       []any{map[string]any{"type": "boolean"}, deliveryShape},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func newID() string {
 	b := make([]byte, 8)
 	rand.Read(b)

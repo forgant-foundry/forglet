@@ -102,6 +102,38 @@ func (s *Flat) Synthesize(dir string, aggregates map[string]*eventing.Aggregate)
 	return nil
 }
 
+func (s *Flat) RCSchema() project.SchemaContribution {
+	return project.SchemaContribution{Properties: javaPomSchemaProps()}
+}
+
+func javaPomSchemaProps() map[string]any {
+	return map[string]any{
+		"groupId": map[string]any{
+			"type":        "string",
+			"description": "Maven groupId (e.g. com.mycompany).",
+		},
+		"version": map[string]any{
+			"type":        "string",
+			"description": "Project version (e.g. 1.0.0-SNAPSHOT).",
+		},
+		"javaVersion": map[string]any{
+			"type":        "string",
+			"description": "Java version (e.g. \"21\").",
+		},
+		"dependencies": map[string]any{
+			"type":                 "object",
+			"description":         "Maven compile-scope dependencies. Keys are groupId:artifactId.",
+			"additionalProperties": map[string]any{"type": "string"},
+			"examples":            []any{map[string]any{"com.google.guava:guava": "33.0.0-jre"}},
+		},
+		"testDependencies": map[string]any{
+			"type":                 "object",
+			"description":         "Maven test-scope dependencies. Keys are groupId:artifactId.",
+			"additionalProperties": map[string]any{"type": "string"},
+		},
+	}
+}
+
 // ---- XML rendering helpers ----
 
 func renderPomHeader(buf *bytes.Buffer) {

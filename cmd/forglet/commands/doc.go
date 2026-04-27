@@ -34,8 +34,16 @@
 //
 // forglet new <template> <name>  — create a new project directory and run Init.
 // forglet synth                  — re-synthesize managed files in the current directory.
+// forglet schema                 — print JSON Schema for .forglet.yml (pipe to a file
+//                                  for IDE YAML-language-server autocomplete).
+// forglet help [topic]           — print implementation reference for plugin or domain authors.
+//                                  Topics: plugin, domain.
+//
+// The schema and help commands are handled before the Cobra dispatcher so
+// they work without Cobra and in custom binaries that replace Execute.
 //
 // Plugins registered via [RegisterPlugin] are passed to every [project.Project]
 // created by both commands. Validators registered via [RegisterValidator]
-// run at the end of every synthesis.
+// run at the end of every synthesis. Plugins and synthesizers that implement
+// [project.Schemer] contribute their rc key definitions to [RunSchema].
 package commands

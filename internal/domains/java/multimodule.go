@@ -75,6 +75,16 @@ func (s *Multimodule) OverlayEvents(rc map[string]any) (map[string][]eventing.Ev
 	return result, nil
 }
 
+func (s *Multimodule) RCSchema() project.SchemaContribution {
+	props := javaPomSchemaProps()
+	props["modules"] = map[string]any{
+		"type":        "array",
+		"items":       map[string]any{"type": "string"},
+		"description": "Maven module names to scaffold.",
+	}
+	return project.SchemaContribution{Properties: props}
+}
+
 func (s *Multimodule) Synthesize(dir string, aggregates map[string]*eventing.Aggregate) error {
 	agg, ok := aggregates["pom.xml"]
 	if !ok {

@@ -151,6 +151,36 @@ func (s *TypeScript) Synthesize(dir string, aggregates map[string]*eventing.Aggr
 	return nil
 }
 
+func (s *TypeScript) RCSchema() project.SchemaContribution {
+	props := nodePackageSchemaProps()
+	props["allowScripts"] = map[string]any{
+		"type":                 "object",
+		"description":         "@lavamoat/allow-scripts configuration. Keys are package names.",
+		"additionalProperties": map[string]any{"type": "boolean"},
+	}
+	return project.SchemaContribution{Properties: props}
+}
+
+func nodePackageSchemaProps() map[string]any {
+	return map[string]any{
+		"dependencies": map[string]any{
+			"type":                 "object",
+			"description":         "Production npm dependencies.",
+			"additionalProperties": map[string]any{"type": "string"},
+		},
+		"devDependencies": map[string]any{
+			"type":                 "object",
+			"description":         "Development npm dependencies.",
+			"additionalProperties": map[string]any{"type": "string"},
+		},
+		"scripts": map[string]any{
+			"type":                 "object",
+			"description":         "npm scripts.",
+			"additionalProperties": map[string]any{"type": "string"},
+		},
+	}
+}
+
 type evtDef struct {
 	typ     string
 	payload any

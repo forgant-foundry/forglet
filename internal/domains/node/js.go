@@ -75,6 +75,10 @@ func (s *JavaScript) OverlayEvents(rc map[string]any) (map[string][]eventing.Eve
 	return map[string][]eventing.Event{"package.json": pkg}, nil
 }
 
+func (s *JavaScript) RCSchema() project.SchemaContribution {
+	return project.SchemaContribution{Properties: nodePackageSchemaProps()}
+}
+
 func (s *JavaScript) Synthesize(dir string, aggregates map[string]*eventing.Aggregate) error {
 	agg, ok := aggregates["package.json"]
 	if !ok {

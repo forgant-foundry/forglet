@@ -76,6 +76,16 @@ func (s *Lambda) OverlayEvents(rc map[string]any) (map[string][]eventing.Event, 
 	return (&TypeScript{}).OverlayEvents(rc)
 }
 
+func (s *Lambda) RCSchema() project.SchemaContribution {
+	props := nodePackageSchemaProps()
+	props["allowScripts"] = map[string]any{
+		"type":                 "object",
+		"description":         "@lavamoat/allow-scripts configuration. Keys are package names.",
+		"additionalProperties": map[string]any{"type": "boolean"},
+	}
+	return project.SchemaContribution{Properties: props}
+}
+
 func (s *Lambda) Synthesize(dir string, aggregates map[string]*eventing.Aggregate) error {
 	for _, filename := range []string{"package.json", "tsconfig.json"} {
 		agg, ok := aggregates[filename]

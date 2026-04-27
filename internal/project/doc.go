@@ -57,6 +57,14 @@
 // is called once during [Project.Init], never during re-synth. Implementations
 // must be idempotent — check for the file before writing.
 //
+// [Schemer] is an optional interface that plugins and synthesizers implement
+// to contribute their rc key definitions to 'forglet schema'. The output is
+// assembled into a JSON Schema document for .forglet.yml that IDE tooling
+// can use for autocomplete. Plugin contributions land as top-level properties;
+// synthesizer contributions are wrapped in if/then blocks keyed on the
+// registered template name. Platform teams get schema coverage for their
+// custom plugins automatically by implementing this interface.
+//
 // [Validator] is an optional post-synthesis policy gate. [Validator.Validate]
 // receives [Meta], the RC map, and the project directory after files are written.
 // Return [Violation] values to report warnings or errors; errors abort the build.

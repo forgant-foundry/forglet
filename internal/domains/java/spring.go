@@ -58,6 +58,10 @@ func (s *Spring) OverlayEvents(rc map[string]any) (map[string][]eventing.Event, 
 	return commonOverlay(rc)
 }
 
+func (s *Spring) RCSchema() project.SchemaContribution {
+	return project.SchemaContribution{Properties: javaPomSchemaProps()}
+}
+
 func (s *Spring) Synthesize(dir string, aggregates map[string]*eventing.Aggregate) error {
 	agg, ok := aggregates["pom.xml"]
 	if !ok {

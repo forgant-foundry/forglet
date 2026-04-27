@@ -91,6 +91,10 @@ func (s *Flat) Scaffold(dir string, _ project.Meta) error {
 
 func (s *Flat) PostSynthesize(dir string) error { return goModTidy(dir) }
 
+func (s *Flat) RCSchema() project.SchemaContribution {
+	return project.SchemaContribution{Properties: goModSchemaProps()}
+}
+
 // GoKnative synthesizes a Knative func-style Go project.
 // It manages only go.mod — func.yaml and Go handler scaffolds are contributed
 // by the knative plugin (knative.New() + knative.NewGo()).
@@ -117,6 +121,10 @@ func (s *GoKnative) Synthesize(dir string, aggregates map[string]*eventing.Aggre
 }
 
 func (s *GoKnative) PostSynthesize(dir string) error { return goModTidy(dir) }
+
+func (s *GoKnative) RCSchema() project.SchemaContribution {
+	return project.SchemaContribution{Properties: goModSchemaProps()}
+}
 
 // Workspace synthesizes a Go workspace (go.work + per-module scaffolds).
 // Managed files: go.work
@@ -205,6 +213,22 @@ func (s *Workspace) Synthesize(dir string, aggregates map[string]*eventing.Aggre
 
 func (s *Workspace) PostSynthesize(dir string) error { return goWorkSync(dir) }
 
+func (s *Workspace) RCSchema() project.SchemaContribution {
+	return project.SchemaContribution{
+		Properties: map[string]any{
+			"go": map[string]any{
+				"type":        "string",
+				"description": "Go version (e.g. \"1.23\").",
+			},
+			"use": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "Additional workspace members to add to go.work beyond the default.",
+			},
+		},
+	}
+}
+
 // Lambda synthesizes a Go AWS Lambda project.
 // Managed files: go.mod
 type Lambda struct{}
@@ -263,6 +287,10 @@ func (s *Lambda) Synthesize(dir string, aggregates map[string]*eventing.Aggregat
 
 func (s *Lambda) PostSynthesize(dir string) error { return goModTidy(dir) }
 
+func (s *Lambda) RCSchema() project.SchemaContribution {
+	return project.SchemaContribution{Properties: goModSchemaProps()}
+}
+
 func lambdaMainGo() []byte {
 	// Cannot use raw string literal — struct tags contain backticks.
 	return []byte("package main\n\nimport (\n\t\"context\"\n\n\t\"github.com/aws/aws-lambda-go/lambda\"\n)\n\ntype Request struct {\n\tName string `json:\"name\"`\n}\n\ntype Response struct {\n\tMessage string `json:\"message\"`\n}\n\nfunc HandleRequest(_ context.Context, req Request) (Response, error) {\n\treturn Response{Message: \"Hello, \" + req.Name}, nil\n}\n\nfunc main() {\n\tlambda.Start(HandleRequest)\n}\n")
@@ -272,6 +300,25 @@ func lambdaMakefile() []byte {
 	return []byte(".PHONY: build\n\nbuild:\n\tGOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap main.go\n")
 }
 
+
+func goModSchemaProps() map[string]any {
+	return map[string]any{
+		"module": map[string]any{
+			"type":        "string",
+			"description": "Go module path (e.g. github.com/myorg/myapp).",
+		},
+		"go": map[string]any{
+			"type":        "string",
+			"description": "Go version (e.g. \"1.23\").",
+		},
+		"require": map[string]any{
+			"type":                 "object",
+			"description":         "Additional go.mod dependencies.",
+			"additionalProperties": map[string]any{"type": "string"},
+			"examples":            []any{map[string]any{"github.com/spf13/cobra": "v1.8.0"}},
+		},
+	}
+}
 
 // scaffoldFile writes content to path only if the file does not already exist.
 func scaffoldFile(path string, content []byte) error {

@@ -163,6 +163,42 @@ func anySliceToStrings(raw []any) ([]string, bool) {
 	return out, len(out) > 0
 }
 
+func (p *Plugin) RCSchema() project.SchemaContribution {
+	return project.SchemaContribution{
+		Properties: map[string]any{
+			"git": map[string]any{
+				"type":        "boolean",
+				"description": "Generate a managed .gitignore with patterns appropriate for the active template.",
+			},
+			"gitignore": map[string]any{
+				"description": "Additional .gitignore configuration. Requires git: true.",
+				"oneOf": []any{
+					map[string]any{
+						"type":        "array",
+						"items":       map[string]any{"type": "string"},
+						"description": "Patterns to append (shorthand for gitignore.add).",
+					},
+					map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"add": map[string]any{
+								"type":        "array",
+								"items":       map[string]any{"type": "string"},
+								"description": "Patterns to append after template defaults.",
+							},
+							"exclude": map[string]any{
+								"type":        "array",
+								"items":       map[string]any{"type": "string"},
+								"description": "System category names to suppress. Built-in: forglet, macos, jetbrains, vscode, eclipse.",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func newID() string {
 	b := make([]byte, 8)
 	rand.Read(b)

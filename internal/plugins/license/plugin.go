@@ -135,6 +135,33 @@ func parseRC(rc map[string]any) (spdx, year, author string) {
 	return
 }
 
+func (p *Plugin) RCSchema() project.SchemaContribution {
+	ids := []any{"MIT", "Apache-2.0", "GPL-3.0", "AGPL-3.0", "ISC"}
+	for name := range p.custom {
+		ids = append(ids, name)
+	}
+	licenseObj := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"id":     map[string]any{"type": "string", "description": "License identifier.", "examples": ids},
+			"year":   map[string]any{"type": "integer", "description": "Copyright year. Defaults to current year."},
+			"author": map[string]any{"type": "string", "description": "Copyright holder name."},
+		},
+		"required": []any{"id"},
+	}
+	return project.SchemaContribution{
+		Properties: map[string]any{
+			"license": map[string]any{
+				"description": "Generate a managed LICENSE file.",
+				"oneOf": []any{
+					map[string]any{"type": "string", "description": "License identifier shorthand.", "examples": ids},
+					licenseObj,
+				},
+			},
+		},
+	}
+}
+
 func newID() string {
 	b := make([]byte, 8)
 	rand.Read(b)

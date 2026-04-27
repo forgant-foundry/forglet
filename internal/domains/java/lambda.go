@@ -55,6 +55,10 @@ func (s *Lambda) OverlayEvents(rc map[string]any) (map[string][]eventing.Event, 
 	return commonOverlay(rc)
 }
 
+func (s *Lambda) RCSchema() project.SchemaContribution {
+	return project.SchemaContribution{Properties: javaPomSchemaProps()}
+}
+
 func (s *Lambda) Synthesize(dir string, aggregates map[string]*eventing.Aggregate) error {
 	agg, ok := aggregates["pom.xml"]
 	if !ok {
