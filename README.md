@@ -147,7 +147,9 @@ github:
   release: true                        # .github/workflows/release.yml (goreleaser / v*-tags)
   delivery: true                       # .github/workflows/delivery.yml + .vergant.yml
   delivery:
-    kind: library                      # vergant versioning + plain GitHub release, no artifacts
+    kind: library                      # vergant versioning + plain GitHub release, no artifacts (default)
+    kind: binary                       # cross-compile Go binaries + upload artifacts
+    main: ./cmd/myapp                  # Go main package path for binary builds (default: ".")
     majorVersion: 2                    # .vergant.yml: current major version (default: 1)
     defaultBranch: develop             # .vergant.yml: trunk branch (default: main)
     supportBranchRegEx: "^release/.*" # .vergant.yml: support branch pattern

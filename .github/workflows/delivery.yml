@@ -22,34 +22,13 @@ jobs:
             - id: version
               name: Apply version
               run: echo "tag=$(vergant new)" >> $GITHUB_OUTPUT
-            - if: startsWith(steps.version.outputs.tag, 'r')
-              name: Build release binaries
-              run: |-
-                VERSION="${{ steps.version.outputs.tag }}"
-                SEM="${VERSION#r}"
-                LDFLAGS="-s -w"
-                mkdir -p dist
-
-                GOOS=linux  GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/forglet .
-                tar czf "dist/forglet_${SEM}_linux_amd64.tar.gz" -C /tmp forglet
-
-                GOOS=darwin GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/forglet .
-                tar czf "dist/forglet_${SEM}_darwin_amd64.tar.gz" -C /tmp forglet
-
-                GOOS=darwin GOARCH=arm64 go build -ldflags="$LDFLAGS" -o /tmp/forglet .
-                tar czf "dist/forglet_${SEM}_darwin_arm64.tar.gz" -C /tmp forglet
-
-                GOOS=windows GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/forglet.exe .
-                cd /tmp && zip "${GITHUB_WORKSPACE}/dist/forglet_${SEM}_windows_amd64.zip" forglet.exe && cd -
-
-                cd dist && sha256sum *.tar.gz *.zip > "forglet_${SEM}_checksums.txt"
             - env:
                 GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               if: startsWith(steps.version.outputs.tag, 'r')
               name: Create release
               run: |-
                 VERSION="${{ steps.version.outputs.tag }}"
-                gh release create "$VERSION" --title "${VERSION#r}" --generate-notes dist/*
+                gh release create "$VERSION" --title "${VERSION#r}" --generate-notes
 name: delivery
 "on":
     push:

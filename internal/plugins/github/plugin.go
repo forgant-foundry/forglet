@@ -28,6 +28,8 @@ const (
 //	  delivery: true                   # .github/workflows/delivery.yml + .vergant.yml
 //	  delivery:
 //	    kind: library                  # vergant versioning + plain GitHub release, no artifacts
+//	    kind: binary                   # cross-compile + upload artifacts; also set main:
+//	    main: ./cmd/myapp              # Go main package path for binary builds (default: ".")
 //	    majorVersion: 2                # .vergant.yml: major version (default: 1)
 //	    defaultBranch: develop         # .vergant.yml: trunk branch (default: main)
 //	    supportBranchRegEx: "^release/.*"  # .vergant.yml: support branch pattern
@@ -82,7 +84,7 @@ func (p *GitHubActionsPlugin) Weave(meta project.Meta, rc map[string]any, stream
 	}
 
 	if delivery.enabled {
-		payload, err := json.Marshal(deliveryPayload(group, meta.Name, delivery.kind))
+		payload, err := json.Marshal(deliveryPayload(group, meta.Name, delivery.kind, delivery.mainPkg))
 		if err != nil {
 			return fmt.Errorf("github plugin: delivery payload: %w", err)
 		}
@@ -117,6 +119,7 @@ func (p *GitHubActionsPlugin) Weave(meta project.Meta, rc map[string]any, stream
 type deliveryCfg struct {
 	enabled            bool
 	kind               string
+	mainPkg            string // Go main package path for binary builds; defaults to "."
 	majorVersion       int
 	defaultBranch      string
 	supportBranchRegEx string
@@ -145,6 +148,9 @@ func parseRC(rc map[string]any) (ci, release bool, delivery deliveryCfg, branch 
 			delivery.enabled = true
 			if k, ok := d["kind"].(string); ok && k != "" {
 				delivery.kind = k
+			}
+			if m, ok := d["main"].(string); ok && m != "" {
+				delivery.mainPkg = m
 			}
 			if mv, ok := d["majorVersion"].(int); ok {
 				delivery.majorVersion = mv
@@ -302,7 +308,7 @@ func releasePayload(group, template string) map[string]any {
 	return base
 }
 
-func deliveryPayload(group, name, kind string) map[string]any {
+func deliveryPayload(group, name, kind, mainPkg string) map[string]any {
 	const (
 		configureGit   = "git config user.email \"github-actions[bot]@users.noreply.github.com\"\ngit config user.name \"github-actions[bot]\""
 		installVergant = "go install github.com/forgant-foundry/vergant/cmd/vergant@latest"
@@ -340,7 +346,7 @@ func deliveryPayload(group, name, kind string) map[string]any {
 				map[string]any{
 					"if":   ifRelease,
 					"name": "Build release binaries",
-					"run":  goDeliveryBuildScript(name),
+					"run":  goDeliveryBuildScript(name, mainPkg),
 				},
 				map[string]any{
 					"env":  map[string]any{"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"},
@@ -447,26 +453,29 @@ func vergantPayload(cfg deliveryCfg) map[string]any {
 	return m
 }
 
-func goDeliveryBuildScript(name string) string {
+func goDeliveryBuildScript(name, mainPkg string) string {
+	if mainPkg == "" {
+		mainPkg = "."
+	}
 	return fmt.Sprintf(
 		`VERSION="${{ steps.version.outputs.tag }}"
 SEM="${VERSION#r}"
 LDFLAGS="-s -w"
 mkdir -p dist
 
-GOOS=linux  GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s .
+GOOS=linux  GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s %[2]s
 tar czf "dist/%[1]s_${SEM}_linux_amd64.tar.gz" -C /tmp %[1]s
 
-GOOS=darwin GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s .
+GOOS=darwin GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s %[2]s
 tar czf "dist/%[1]s_${SEM}_darwin_amd64.tar.gz" -C /tmp %[1]s
 
-GOOS=darwin GOARCH=arm64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s .
+GOOS=darwin GOARCH=arm64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s %[2]s
 tar czf "dist/%[1]s_${SEM}_darwin_arm64.tar.gz" -C /tmp %[1]s
 
-GOOS=windows GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s.exe .
+GOOS=windows GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s.exe %[2]s
 cd /tmp && zip "${GITHUB_WORKSPACE}/dist/%[1]s_${SEM}_windows_amd64.zip" %[1]s.exe && cd -
 
-cd dist && sha256sum *.tar.gz *.zip > "%[1]s_${SEM}_checksums.txt"`, name)
+cd dist && sha256sum *.tar.gz *.zip > "%[1]s_${SEM}_checksums.txt"`, name, mainPkg)
 }
 
 func newID() string {

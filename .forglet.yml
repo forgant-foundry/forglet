@@ -19,3 +19,4 @@ github:
   delivery:
     majorVersion: 1
     kind: library
+    main: ./cmd/forglet

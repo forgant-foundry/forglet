@@ -603,6 +603,34 @@ func TestDelivery_Java_Library_HasReleaseCreate(t *testing.T) {
 	assertContains(t, content, "--generate-notes")
 }
 
+func TestDelivery_Go_Binary_CustomMainPkg(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n    main: ./cmd/mycli\n")
+
+	if err := p.Init(project.Meta{Name: "mycli", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "./cmd/mycli")
+}
+
+func TestDelivery_Go_Binary_DefaultMainPkg(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n")
+
+	if err := p.Init(project.Meta{Name: "mycli", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	// Default package is "." — should appear in go build commands
+	assertContains(t, content, "go build")
+	if strings.Contains(content, "./cmd/") {
+		t.Error("default binary delivery should not reference ./cmd/")
+	}
+}
+
 func TestDelivery_DefaultsToKindLibrary(t *testing.T) {
 	dir, p := setup(t)
 	writeRC(t, dir, "github:\n  delivery: true\n")
