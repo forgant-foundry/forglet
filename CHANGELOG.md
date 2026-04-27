@@ -1,8 +1,8 @@
 # Changelog
 
-## [1.0.0] - 2026-04-25
+## [0.1.0] - 2026-04-25
 
-First release. Everything below was built together as a cohesive v1.
+First public release. Everything below was built together as a cohesive initial release.
 
 ---
 
