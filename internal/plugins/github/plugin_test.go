@@ -638,9 +638,22 @@ func TestDelivery_Idempotent(t *testing.T) {
 
 // ---- .vergant.yml ----------------------------------------------------------------
 
-func TestVergant_FileCreated(t *testing.T) {
+func TestVergant_AbsentWhenNoFieldsConfigured(t *testing.T) {
 	dir, p := setup(t)
 	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".vergant.yml")); !os.IsNotExist(err) {
+		t.Error(".vergant.yml should not be created when no vergant fields are configured")
+	}
+}
+
+func TestVergant_CreatedWhenFieldSet(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    majorVersion: 2\n")
 
 	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
 		t.Fatal(err)
@@ -651,21 +664,23 @@ func TestVergant_FileCreated(t *testing.T) {
 	}
 }
 
-func TestVergant_HasDefaultFields(t *testing.T) {
+func TestVergant_OnlyWritesSetFields(t *testing.T) {
 	dir, p := setup(t)
-	writeRC(t, dir, "github:\n  delivery: true\n")
+	writeRC(t, dir, "github:\n  delivery:\n    majorVersion: 2\n    mode: candidate\n")
 
 	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
 		t.Fatal(err)
 	}
 
 	content := readFile(t, filepath.Join(dir, ".vergant.yml"))
-	assertContains(t, content, "majorVersion: 1")
-	assertContains(t, content, "defaultBranch: main")
-	assertContains(t, content, "mode: release")
-	assertContains(t, content, "supportBranchRegEx")
-	assertContains(t, content, "devBranchRegEx")
-	assertContains(t, content, "patchBranchRegEx")
+	assertContains(t, content, "majorVersion: 2")
+	assertContains(t, content, "mode: candidate")
+	if strings.Contains(content, "defaultBranch") {
+		t.Error(".vergant.yml should not contain defaultBranch when not set")
+	}
+	if strings.Contains(content, "BranchRegEx") {
+		t.Error(".vergant.yml should not contain branch regexes when not set")
+	}
 }
 
 func TestVergant_MajorVersionOverride(t *testing.T) {
@@ -717,7 +732,7 @@ func TestVergant_CustomBranchRegex(t *testing.T) {
 
 func TestVergant_IsReadOnly(t *testing.T) {
 	dir, p := setup(t)
-	writeRC(t, dir, "github:\n  delivery: true\n")
+	writeRC(t, dir, "github:\n  delivery:\n    majorVersion: 1\n")
 
 	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
 		t.Fatal(err)
@@ -734,7 +749,7 @@ func TestVergant_IsReadOnly(t *testing.T) {
 
 func TestVergant_HasManagedMarker(t *testing.T) {
 	dir, p := setup(t)
-	writeRC(t, dir, "github:\n  delivery: true\n")
+	writeRC(t, dir, "github:\n  delivery:\n    majorVersion: 1\n")
 
 	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
 		t.Fatal(err)

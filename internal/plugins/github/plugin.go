@@ -94,17 +94,19 @@ func (p *GitHubActionsPlugin) Weave(meta project.Meta, rc map[string]any, stream
 			Payload: json.RawMessage(payload),
 		})
 
-		vpayload, err := json.Marshal(vergantPayload(delivery))
-		if err != nil {
-			return fmt.Errorf("github plugin: vergant payload: %w", err)
+		if vp := vergantPayload(delivery); len(vp) > 0 {
+			vpayload, err := json.Marshal(vp)
+			if err != nil {
+				return fmt.Errorf("github plugin: vergant payload: %w", err)
+			}
+			stream.SetFormat(vergantFile, project.FormatYAML)
+			stream.Append(vergantFile, eventing.Event{
+				ID:      newID(),
+				Type:    "vergant.configured",
+				Seq:     1,
+				Payload: json.RawMessage(vpayload),
+			})
 		}
-		stream.SetFormat(vergantFile, project.FormatYAML)
-		stream.Append(vergantFile, eventing.Event{
-			ID:      newID(),
-			Type:    "vergant.configured",
-			Seq:     1,
-			Payload: json.RawMessage(vpayload),
-		})
 	}
 
 	return nil
@@ -124,15 +126,7 @@ type deliveryCfg struct {
 }
 
 func defaultDeliveryCfg() deliveryCfg {
-	return deliveryCfg{
-		kind:               "binary",
-		majorVersion:       1,
-		defaultBranch:      "main",
-		supportBranchRegEx: `^support\/.*`,
-		devBranchRegEx:     `^dev\/(.+)$`,
-		patchBranchRegEx:   `^patch\/(.+)$`,
-		mode:               "release",
-	}
+	return deliveryCfg{kind: "binary"}
 }
 
 func parseRC(rc map[string]any) (ci, release bool, delivery deliveryCfg, branch string) {
@@ -426,15 +420,31 @@ func deliveryPayload(group, name, kind string) map[string]any {
 	}
 }
 
+// vergantPayload returns a map containing only the vergant fields explicitly
+// configured in .forglet.yml. Fields at their zero value are omitted so the
+// generated .vergant.yml stays minimal and vergant's own defaults apply for
+// anything not present.
 func vergantPayload(cfg deliveryCfg) map[string]any {
-	return map[string]any{
-		"majorVersion":       cfg.majorVersion,
-		"defaultBranch":      cfg.defaultBranch,
-		"supportBranchRegEx": cfg.supportBranchRegEx,
-		"devBranchRegEx":     cfg.devBranchRegEx,
-		"patchBranchRegEx":   cfg.patchBranchRegEx,
-		"mode":               cfg.mode,
+	m := map[string]any{}
+	if cfg.majorVersion != 0 {
+		m["majorVersion"] = cfg.majorVersion
 	}
+	if cfg.defaultBranch != "" {
+		m["defaultBranch"] = cfg.defaultBranch
+	}
+	if cfg.supportBranchRegEx != "" {
+		m["supportBranchRegEx"] = cfg.supportBranchRegEx
+	}
+	if cfg.devBranchRegEx != "" {
+		m["devBranchRegEx"] = cfg.devBranchRegEx
+	}
+	if cfg.patchBranchRegEx != "" {
+		m["patchBranchRegEx"] = cfg.patchBranchRegEx
+	}
+	if cfg.mode != "" {
+		m["mode"] = cfg.mode
+	}
+	return m
 }
 
 func goDeliveryBuildScript(name string) string {
