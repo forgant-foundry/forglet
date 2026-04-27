@@ -144,33 +144,40 @@ gitignore:                             # GitPlugin: additional patterns appended
 github: true                           # GitHubPlugin: CI workflow on push/PR to main
 github:
   ci: true                             # .github/workflows/ci.yml
-  release: true                        # .github/workflows/release.yml
+  release: true                        # .github/workflows/release.yml (goreleaser / v*-tags)
+  delivery: true                       # .github/workflows/delivery.yml (vergant / branch-driven CD)
+  delivery:
+    kind: library                      # vergant versioning + plain GitHub release, no artifacts
   defaultBranch: "develop"             # CI trigger branch (default: main)
+
+license: MIT                           # LicensePlugin: managed LICENSE file (shorthand)
+license:                               # LicensePlugin: with year and copyright holder
+  spdx: Apache-2.0                     # MIT, Apache-2.0, GPL-3.0, AGPL-3.0, ISC
+  year: 2024
+  author: "Acme Corp"
 ```
 
 ## Plugins
 
 ### Default binary
 
-The stock `forglet` binary ships with two plugins registered:
+The stock `forglet` binary ships with these plugins registered:
 
 **GitPlugin** — synthesizes a `.gitignore` appropriate for the active template. Activate per-project with `git: true` in `.forglet.yml`. Template-aware: selects pattern sets for node, go, and java templates.
 
-```yaml
-# .forglet.yml
-git: true
-```
+**GitHubActionsPlugin** — synthesizes GitHub Actions workflow files. Activate per-project with `github:` in `.forglet.yml`. Supports CI, goreleaser-based release, and vergant-based delivery workflows.
+
+**LicensePlugin** — synthesizes a managed `LICENSE` file from built-in SPDX texts. Activate per-project with `license:` in `.forglet.yml`.
 
 **NpmScriptPolicyValidator** — enforces that `@lavamoat/allow-scripts` is configured in node-ts projects. Runs automatically after every synthesis; no activation required.
 
 ### Available for custom binaries
 
-The following plugins are included in the repository and can be registered in a custom binary. None are wired into the default binary because they represent optional platform choices.
+The following plugins are included in the repository and can be registered in a custom binary.
 
 | Package | Type | What it does |
 |---|---|---|
 | `internal/plugins/cdk` | Plugin + Scaffolder | AWS CDK devDependencies, `cdk.json`, and `bin/app.ts` + `lib/stack.ts` scaffolds for `node-ts` |
-| `internal/plugins/github` | Plugin | GitHub Actions CI and release workflows; template-aware (Go/Java/Node); activated by `github:` in `.forglet.yml` |
 | `internal/plugins/knative` | Plugin + Scaffolder | `.knative/service.yaml`, `.dockerignore`, and `Dockerfile` scaffold for `node-ts` |
 | `internal/plugins/lerna` | Plugin | `lerna.json` and `lerna` devDependency for `node-ts`; pair with WorkspacesPlugin |
 | `internal/plugins/workspaces` | Plugin | `private: true` and `workspaces: ["packages/*"]` for `node-ts` |
@@ -272,6 +279,58 @@ func main() {
 ```
 
 Build and distribute this binary to your engineers in place of the vanilla `forglet` binary. All `forglet new` and `forglet synth` invocations will then include the plugin's events automatically.
+
+## Add a proprietary license
+
+Platform teams that need a proprietary or non-SPDX license do not write a new plugin — they extend the built-in `LicensePlugin` at construction time using `WithCustom` and register the extended plugin in their custom `main.go`:
+
+```go
+// cmd/myforglet/main.go
+package main
+
+import (
+    "fmt"
+    "os"
+
+    "github.com/forgant-foundry/forglet/cmd/forglet/commands"
+    licenseplugin "github.com/forgant-foundry/forglet/internal/plugins/license"
+)
+
+// Embed or load the license text however suits the platform — literal string,
+// //go:embed, read from a secure store at build time, etc.
+const proprietaryLicense = `Proprietary Software License
+
+Copyright (c) {{COPYRIGHT}} Acme Corp. All rights reserved.
+
+This software and its source code are confidential and proprietary to
+Acme Corp. Unauthorised copying, distribution, or use is strictly
+prohibited without prior written consent from Acme Corp.
+`
+
+func main() {
+    commands.RegisterPlugin(licenseplugin.New(
+        licenseplugin.WithCustom("acme-proprietary", proprietaryLicense),
+    ))
+    // register other platform plugins...
+    if err := commands.Execute(); err != nil {
+        fmt.Fprintln(os.Stderr, err)
+        os.Exit(1)
+    }
+}
+```
+
+Projects managed by this binary then select the license in `.forglet.yml`:
+
+```yaml
+license:
+  spdx: acme-proprietary
+  year: 2024
+  author: "Acme Corp"
+```
+
+The `{{COPYRIGHT}}` placeholder is replaced with `"YEAR AUTHOR"` (or just `"YEAR"` when author is omitted), identically to the built-in SPDX licenses. Custom names are matched case-insensitively. If a custom name matches a built-in SPDX identifier, the custom text wins — this lets a platform team substitute a modified MIT or Apache text when required.
+
+The `LICENSE` file is written verbatim with no forglet managed-comment marker, so it passes GitHub's license detection and standard license tooling unchanged.
 
 ## Private module access
 
