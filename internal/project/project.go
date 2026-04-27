@@ -155,6 +155,19 @@ func (p *Project) Synthesize(s Synthesizer) error {
 	}
 
 	aggregates := BuildAggregates(stream.Events(), overlayEvents)
+
+	current := make(map[string]struct{}, len(aggregates))
+	for filename := range aggregates {
+		current[filename] = struct{}{}
+	}
+	old, err := p.loadManifest()
+	if err != nil {
+		return err
+	}
+	if err := p.removeOrphans(old, current); err != nil {
+		return err
+	}
+
 	for filename, agg := range aggregates {
 		if err := p.saveAggregate(filename, agg); err != nil {
 			return err
@@ -171,7 +184,10 @@ func (p *Project) Synthesize(s Synthesizer) error {
 			return err
 		}
 	}
-	return p.runValidators(meta, rc)
+	if err := p.runValidators(meta, rc); err != nil {
+		return err
+	}
+	return p.saveManifest(current)
 }
 
 // BuildAggregates builds per-file aggregates by sequentially deep-merging N

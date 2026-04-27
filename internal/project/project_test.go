@@ -12,9 +12,13 @@ import (
 )
 
 // stubSynth is a minimal Synthesizer for testing the project layer in isolation.
+// managed lists the filenames Synthesize will write; when empty all aggregates are written.
+// Real synthesizers only write their specific files; set managed to mirror that when
+// cross-cutting plugins are also registered so the two writers don't conflict.
 type stubSynth struct {
 	template map[string][]eventing.Event
 	overlay  map[string][]eventing.Event
+	managed  []string
 }
 
 func (s *stubSynth) InitializeEvents(_ string) (map[string][]eventing.Event, error) {
@@ -26,7 +30,17 @@ func (s *stubSynth) OverlayEvents(_ map[string]any) (map[string][]eventing.Event
 }
 
 func (s *stubSynth) Synthesize(dir string, aggregates map[string]*eventing.Aggregate) error {
-	for filename, agg := range aggregates {
+	files := s.managed
+	if len(files) == 0 {
+		for f := range aggregates {
+			files = append(files, f)
+		}
+	}
+	for _, filename := range files {
+		agg, ok := aggregates[filename]
+		if !ok {
+			continue
+		}
 		b, err := agg.ToJSON()
 		if err != nil {
 			return err
@@ -216,4 +230,94 @@ type rcCaptureSynth struct {
 func (c *rcCaptureSynth) OverlayEvents(rc map[string]any) (map[string][]eventing.Event, error) {
 	*c.captured = rc
 	return c.Synthesizer.OverlayEvents(rc)
+}
+
+// crossCuttingPlugin adds a cross-cutting file when rc[key] is truthy.
+type crossCuttingPlugin struct {
+	rcKey    string
+	filename string
+}
+
+func (pl *crossCuttingPlugin) Weave(_ project.Meta, rc map[string]any, stream *project.EventStream) error {
+	if v, _ := rc[pl.rcKey].(bool); !v {
+		return nil
+	}
+	b, _ := json.Marshal(map[string]any{"content": "managed"})
+	stream.SetFormat(pl.filename, project.FormatJSON)
+	stream.Append(pl.filename, eventing.Event{
+		ID: "test.1", Type: "test.created", Seq: 1, Payload: json.RawMessage(b),
+	})
+	return nil
+}
+
+func TestSynthesize_RemovesOrphanedManagedFile(t *testing.T) {
+	dir := testutil.TempDir(t)
+	pl := &crossCuttingPlugin{rcKey: "extra", filename: "extra.json"}
+	s := &stubSynth{
+		template: map[string][]eventing.Event{
+			"package.json": {evt(t, "e1", "init", 1, map[string]any{"name": "test-app"})},
+		},
+		managed: []string{"package.json"},
+	}
+	p := project.New(dir).WithPlugins(pl)
+
+	// Init with extra.json enabled.
+	rc := []byte("extra: true\n")
+	if err := os.WriteFile(filepath.Join(dir, ".forglet.yml"), rc, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Init(project.Meta{Name: "test-app", Template: "node-ts"}, s); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "extra.json")); err != nil {
+		t.Fatalf("extra.json not created: %v", err)
+	}
+
+	// Re-write rc without extra key, re-synth.
+	if err := os.WriteFile(filepath.Join(dir, ".forglet.yml"), []byte("name: test-app\ntemplate: node-ts\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Synthesize(s); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "extra.json")); !os.IsNotExist(err) {
+		t.Error("extra.json should have been removed as an orphan")
+	}
+}
+
+func TestSynthesize_PreservesUserOwnedOrphan(t *testing.T) {
+	dir := testutil.TempDir(t)
+	pl := &crossCuttingPlugin{rcKey: "extra", filename: "extra.json"}
+	s := &stubSynth{
+		template: map[string][]eventing.Event{
+			"package.json": {evt(t, "e1", "init", 1, map[string]any{"name": "test-app"})},
+		},
+		managed: []string{"package.json"},
+	}
+	p := project.New(dir).WithPlugins(pl)
+
+	rc := []byte("extra: true\n")
+	if err := os.WriteFile(filepath.Join(dir, ".forglet.yml"), rc, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Init(project.Meta{Name: "test-app", Template: "node-ts"}, s); err != nil {
+		t.Fatal(err)
+	}
+
+	// User takes ownership by making the file writable.
+	if err := os.Chmod(filepath.Join(dir, "extra.json"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, ".forglet.yml"), []byte("name: test-app\ntemplate: node-ts\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Synthesize(s); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "extra.json")); err != nil {
+		t.Errorf("user-owned extra.json should not have been removed: %v", err)
+	}
 }
