@@ -1,0 +1,16 @@
+name: forglet
+template: go
+
+module: github.com/forgant-foundry/forglet
+require:
+  github.com/forgant-foundry/eventing: v0.0.0-20260419213514-6606b9c5284f
+  github.com/spf13/cobra: v1.8.0
+  gopkg.in/yaml.v3: v3.0.1
+
+git: true
+gitignore:
+  - /forglet
+  - .scratch/
+
+github:
+  delivery: true
