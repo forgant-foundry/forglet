@@ -75,7 +75,7 @@ type PostSynthesizer interface {
 }
 ```
 
-`Project.Synthesize` calls `PostSynthesize` immediately after `Synthesize` if the synthesizer implements it. Critically, it is NOT called when tests invoke `Synthesize` directly — keeping unit tests free of network and toolchain dependencies. The Go domain synthesizers (`Flat`, `Lambda`, `KnativeFunc`) implement it to run `go mod tidy`; `Workspace` implements it to run `go work sync`. Both handle the read-only permissions that `WriteManaged` applies before and after the command runs.
+`Project.Synthesize` calls `PostSynthesize` immediately after `Synthesize` if the synthesizer implements it. Critically, it is NOT called when tests invoke `Synthesize` directly — keeping unit tests free of network and toolchain dependencies. The Go domain synthesizers (`Flat`, `Lambda`, `GoKnative`) implement it to run `go mod tidy`; `Workspace` implements it to run `go work sync`. Both handle the read-only permissions that `WriteManaged` applies before and after the command runs.
 
 ### Plugin Architecture
 
@@ -198,7 +198,7 @@ Single `go.mod` at the root (`github.com/forgant-foundry/forglet`):
 - `internal/plugins/workspaces/` — npm workspaces (`private: true`, `workspaces: ["packages/*"]`)
 - `internal/plugins/lerna/` — Lerna monorepo (`lerna.json` via `FormatJSON`, `lerna` devDependency)
 - `internal/plugins/cdk/` — AWS CDK (`cdk.json` via `FormatJSON`, CDK devDependencies, scaffolds `bin/app.ts` + `lib/stack.ts`)
-- `internal/plugins/knative/` — Knative Serving (`.knative/service.yaml` via `FormatYAML`, `.dockerignore` via `FormatPattern`, scaffolds `Dockerfile`)
+- `internal/plugins/knative/` — Knative Serving; `Plugin` (node-ts): `.knative/service.yaml` via `FormatYAML`, `.dockerignore` via `FormatPattern`, scaffolds `Dockerfile`; `GoPlugin` (go-knative): `func.yaml` via `FormatYAML`, scaffolds `Dockerfile`, `handle.go`, `main.go`, `handle_test.go`
 - `internal/testutil/` — shared `TempDir` helper
 
 ### Testing Conventions
@@ -261,3 +261,24 @@ Forglet now runs `go mod tidy` automatically via `PostSynthesize` on every synth
 The remaining nuance: a developer who manually edits the indirect block will have those edits overwritten on the next synth, since `go mod tidy` re-derives the full transitive graph from scratch. This is correct behaviour — indirect deps are not yours to manage.
 
 *Discovered during the first live `forglet synth` run on the vergant project. Resolved by introducing `PostSynthesizer`.*
+
+## Documentation Maintenance
+
+### Keep docs current when you change code
+
+Whenever you make an implementation change, consider whether documentation needs to follow. Three places to check:
+
+1. **`doc.go` files** — every package under `internal/` and `internal/plugins/` has one. If you add, rename, or remove a type, interface, format constant, or RC key, update the corresponding doc.go. These are the primary reference for developers implementing the same interface in other packages.
+
+2. **`README.md`** — targets both tool users and tool developers. Update it when you change the public RC key surface (`.forglet.yml` key reference), add or remove plugins from the default binary, change a template's managed or scaffolded files, or change any workflow a user would follow.
+
+3. **`CLAUDE.md`** — this file. Update it when you discover a design constraint, learn *why* a decision was made, or clarify a convention that isn't obvious from reading the code. The goal is that the next conversation can start from a complete picture.
+
+### Capture architectural decisions as they emerge
+
+As we work together, watch for moments when:
+- A decision involves a trade-off that would surprise a future reader (record the why, not just the what)
+- A convention is established that applies beyond the current task (e.g. a new interface pattern, a new plugin capability)
+- An error or wrong turn reveals a constraint worth remembering (like the KnativeFunc → GoKnative rename, or the FormatText requirement for LICENSE)
+
+When you notice one, update CLAUDE.md in the same commit as the code — don't defer it.

@@ -18,9 +18,10 @@
 // binary (GOOS=linux GOARCH=amd64). Scaffolds main.go with a typed
 // lambda.Start handler.
 //
-// [KnativeFunc] (template "go-knative") — a Knative function project. Manages
-// both go.mod and func.yaml (the Knative func CLI manifest). Scaffolds an HTTP
-// handler function, a main.go that starts the server, and a handler test.
+// [GoKnative] (template "go-knative") — a Knative function project. Manages
+// go.mod only (delegates to Flat); does not implement Scaffolder. The
+// knative.GoPlugin writes func.yaml (via FormatYAML) and scaffolds handle.go,
+// main.go, handle_test.go, and Dockerfile — register it alongside GoKnative.
 //
 // # RC overlay keys (all templates)
 //

@@ -77,7 +77,10 @@
 // write events to it. A contributor registers a render format with
 // [EventStream.SetFormat] alongside its [EventStream.Append] calls.
 // [Project.Synthesize] then renders each registered file automatically using
-// one of the [FileFormat] constants ([FormatPattern], [FormatJSON], [FormatYAML]).
+// one of the [FileFormat] constants ([FormatPattern], [FormatJSON], [FormatYAML],
+// [FormatText]). [FormatText] writes the aggregate's "text" node as raw bytes
+// with no managed-comment marker — use it for LICENSE files and other content
+// that must not be modified by forglet's comment injection.
 // No changes to project.go are needed when a new cross-cutting file is introduced.
 //
 // # Aggregate provenance

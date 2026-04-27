@@ -29,8 +29,8 @@ my-app/
   package.json          # managed — overwritten on synth
   tsconfig.json         # managed — overwritten on synth
   src/index.ts          # scaffold — written once, never overwritten
+  .forglet.yml          # records template name + project name (add your config here)
   .forglet/
-    project.json        # records template name
     package.json.json   # aggregate snapshot with per-field provenance
     tsconfig.json.json  # aggregate snapshot
 ```
@@ -178,7 +178,7 @@ The following plugins are included in the repository and can be registered in a 
 | Package | Type | What it does |
 |---|---|---|
 | `internal/plugins/cdk` | Plugin + Scaffolder | AWS CDK devDependencies, `cdk.json`, and `bin/app.ts` + `lib/stack.ts` scaffolds for `node-ts` |
-| `internal/plugins/knative` | Plugin + Scaffolder | `.knative/service.yaml`, `.dockerignore`, and `Dockerfile` scaffold for `node-ts` |
+| `internal/plugins/knative` | Plugin + Scaffolder | `node-ts`: `.knative/service.yaml`, `.dockerignore`, `Dockerfile` scaffold; `go-knative` (via `knative.NewGo()`): `func.yaml`, `Dockerfile`, handler scaffolds |
 | `internal/plugins/lerna` | Plugin | `lerna.json` and `lerna` devDependency for `node-ts`; pair with WorkspacesPlugin |
 | `internal/plugins/workspaces` | Plugin | `private: true` and `workspaces: ["packages/*"]` for `node-ts` |
 
@@ -415,7 +415,7 @@ mkdir -p .scratch && cd .scratch
 cd hello
 ls -la
 cat package.json
-cat .forglet/project.json           # records template + project name
+cat .forglet.yml                    # records template + project name
 cat .forglet/package.json.json      # aggregate snapshot with per-field provenance
 ```
 
