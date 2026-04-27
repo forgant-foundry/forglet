@@ -192,6 +192,7 @@ Single `go.mod` at the root (`github.com/forgant-foundry/forglet`):
 - `internal/domains/node/` — `node-ts` and `node-js` synthesizers (`package.json`, `tsconfig.json`, `src/index.ts` / `index.js` scaffolds)
 - `internal/domains/golang/` — `go` and `go-workspace` synthesizers (`go.mod` / `go.work`, module scaffolds)
 - `internal/plugins/git/` — cross-cutting `.gitignore` support, driven by `meta.Template` + `rc["git"]`
+- `internal/plugins/github/` — GitHub Actions workflows (`ci.yml`, `release.yml`, `delivery.yml` via `FormatYAML`); delivery uses vergant for branch-driven CD; supports `kind: library` for no-artifact releases
 - `internal/plugins/workspaces/` — npm workspaces (`private: true`, `workspaces: ["packages/*"]`)
 - `internal/plugins/lerna/` — Lerna monorepo (`lerna.json` via `FormatJSON`, `lerna` devDependency)
 - `internal/plugins/cdk/` — AWS CDK (`cdk.json` via `FormatJSON`, CDK devDependencies, scaffolds `bin/app.ts` + `lib/stack.ts`)
@@ -239,7 +240,7 @@ Forglet and vergant are mutual clients of each other. This relationship is not i
 - Changes to the `go` synthesizer should be validated by running `forglet synth` in the vergant repo before shipping.
 - Changes to vergant's core versioning logic should be validated by running vergant against the forglet repo before shipping.
 - Features each project needs from the other are the highest-signal driver of evolution: if managing vergant exposes a gap in forglet's Go support, that gap is real. If versioning forglet exposes a gap in vergant's strategy logic, that gap is real.
-- Future work: a forglet plugin that wires vergant versioning into managed projects — so that `forglet new go myproject` bootstraps both the project scaffold and its release pipeline in a single operation.
+- The `internal/plugins/github` delivery workflow (`delivery: true` in `.forglet.yml`) is the integration point: it wires vergant into a managed project's CI pipeline so that `forglet new go myproject` + enabling delivery bootstraps both the project scaffold and its release pipeline in one operation.
 
 ## Design Notes
 
