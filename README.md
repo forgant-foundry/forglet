@@ -163,6 +163,16 @@ license:                               # LicensePlugin: with year and copyright 
   id: Apache-2.0                       # built-in: MIT, Apache-2.0, GPL-3.0, AGPL-3.0, ISC; or any custom name
   year: 2024
   author: "Acme Corp"
+
+fly: true                              # FlyPlugin: fly.toml, deploy.yml workflow, and Dockerfile scaffold
+fly:
+  region: iad                          # Fly.io primary region (default: iad)
+  port: 8080                           # internal HTTP port (default: 8080)
+  memory: 256mb                        # VM memory (default: 256mb)
+  cpus: 1                              # VM CPUs (default: 1)
+  healthPath: /healthz                 # health check HTTP path (default: /healthz)
+  main: ./cmd/myapp                    # Go main package path for Dockerfile CMD (default: .; Go only)
+  branch: main                         # deploy trigger branch (default: main)
 ```
 
 ## Plugins
@@ -186,6 +196,7 @@ The following plugins are included in the repository and can be registered in a 
 | Package | Type | What it does |
 |---|---|---|
 | `internal/plugins/cdk` | Plugin + Scaffolder | AWS CDK devDependencies, `cdk.json`, and `bin/app.ts` + `lib/stack.ts` scaffolds for `node-ts` |
+| `internal/plugins/fly` | Plugin + Scaffolder | Fly.io deployment: `fly.toml`, `.github/workflows/deploy.yml`, and a language-appropriate `Dockerfile` scaffold (Go multi-stage, Java Maven, Node-TS with build step, Node-JS production-only) |
 | `internal/plugins/knative` | Plugin + Scaffolder | `node-ts`: `.knative/service.yaml`, `.dockerignore`, `Dockerfile` scaffold; `go-knative` (via `knative.NewGo()`): `func.yaml`, `Dockerfile`, handler scaffolds |
 | `internal/plugins/lerna` | Plugin | `lerna.json` and `lerna` devDependency for `node-ts`; pair with WorkspacesPlugin |
 | `internal/plugins/workspaces` | Plugin | `private: true` and `workspaces: ["packages/*"]` for `node-ts` |
@@ -266,6 +277,27 @@ Plugins run after the template layer and before the `.forglet.yml` overlay, so t
 Some files — like `.gitignore` — are not owned by any one synthesizer. Instead, any plugin can contribute events to them by appending to the appropriate filename in the stream. The project layer recognises these **cross-cutting files** and renders them automatically (one pattern per line, sorted alphabetically), without the synthesizer needing to know they exist.
 
 The built-in `internal/plugins/git` plugin demonstrates this: when `git: true` appears in `.forglet.yml`, it selects the right patterns for the project's template and appends them to `.gitignore`. No synthesizer changes are needed when a new template is added — only the plugin's pattern map needs a new entry.
+
+### One-time scaffold files
+
+Plugins that need to write files the developer owns (e.g. `Dockerfile`, `bin/app.ts`) implement `project.Scaffolder` alongside `project.Plugin`. `Scaffold` is called once during `forglet new` and never again during `forglet synth`, so the developer's edits are preserved.
+
+Scaffold file content should be embedded with `//go:embed` rather than inlined as string literals. Place the files in a `scaffold/` subdirectory within your plugin package:
+
+```go
+import _ "embed"
+
+//go:embed scaffold/app.ts
+var appTSScaffold []byte
+
+func (p *MyPlugin) Scaffold(dir string, meta project.Meta) error {
+    dest := filepath.Join(dir, "bin", "app.ts")
+    if _, err := os.Stat(dest); err == nil {
+        return nil // already exists — never overwrite
+    }
+    return os.WriteFile(dest, appTSScaffold, 0644)
+}
+```
 
 ## Wire a plugin into a custom binary
 
@@ -357,6 +389,7 @@ go test ./internal/domains/node/
 go test ./internal/domains/golang/
 go test ./internal/domains/java/
 go test ./internal/plugins/git/
+go test ./internal/plugins/fly/
 
 # Run a single test by name
 go test -run TestSynthesizeIsIdempotent ./internal/project/

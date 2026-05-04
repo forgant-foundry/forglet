@@ -2,6 +2,7 @@ package cdk
 
 import (
 	"crypto/rand"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +11,12 @@ import (
 	"github.com/forgant-foundry/eventing"
 	"github.com/forgant-foundry/forglet/internal/project"
 )
+
+//go:embed scaffold/app.ts
+var binAppTSScaffold []byte
+
+//go:embed scaffold/stack.ts
+var libStackTSScaffold []byte
 
 // CDKPlugin adds AWS CDK support to any node template using the per-function
 // Lambda pattern (NodejsFunction per workspace package). It manages package.json
@@ -95,10 +102,10 @@ func (p *CDKPlugin) Weave(meta project.Meta, rc map[string]any, stream *project.
 }
 
 func (p *CDKPlugin) Scaffold(dir string, meta project.Meta) error {
-	if err := scaffoldOnce(filepath.Join(dir, "bin", "app.ts"), binAppTS()); err != nil {
+	if err := scaffoldOnce(filepath.Join(dir, "bin", "app.ts"), binAppTSScaffold); err != nil {
 		return err
 	}
-	return scaffoldOnce(filepath.Join(dir, "lib", "stack.ts"), libStackTS())
+	return scaffoldOnce(filepath.Join(dir, "lib", "stack.ts"), libStackTSScaffold)
 }
 
 func scaffoldOnce(path string, content []byte) error {
@@ -111,34 +118,6 @@ func scaffoldOnce(path string, content []byte) error {
 	return os.WriteFile(path, content, 0644)
 }
 
-func binAppTS() []byte {
-	return []byte(`#!/usr/bin/env node
-import * as cdk from 'aws-cdk-lib';
-import { AppStack } from '../lib/stack';
-
-const app = new cdk.App();
-new AppStack(app, 'AppStack');
-`)
-}
-
-func libStackTS() []byte {
-	return []byte(`import * as cdk from 'aws-cdk-lib';
-import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
-import { Construct } from 'constructs';
-
-export class AppStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
-    super(scope, id, props);
-
-    // Add Lambda functions here using NodejsFunction, e.g.:
-    // new NodejsFunction(this, 'GetUser', {
-    //   entry: 'packages/get-user/index.ts',
-    //   handler: 'handler',
-    // });
-  }
-}
-`)
-}
 
 func newID() string {
 	b := make([]byte, 8)

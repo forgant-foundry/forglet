@@ -1,6 +1,7 @@
 package node
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,6 +10,9 @@ import (
 	"github.com/forgant-foundry/eventing"
 	"github.com/forgant-foundry/forglet/internal/project"
 )
+
+//go:embed scaffold/handler.ts
+var lambdaHandlerTSScaffold []byte
 
 // Lambda synthesizes a Node.js TypeScript Lambda monorepo.
 // Managed files: package.json, tsconfig.json
@@ -109,7 +113,7 @@ func (s *Lambda) Synthesize(dir string, aggregates map[string]*eventing.Aggregat
 
 	handlerIndex := filepath.Join(handlerDir, "index.ts")
 	if _, err := os.Stat(handlerIndex); os.IsNotExist(err) {
-		if err := os.WriteFile(handlerIndex, lambdaHandlerTs(), 0644); err != nil {
+		if err := os.WriteFile(handlerIndex, lambdaHandlerTSScaffold, 0644); err != nil {
 			return err
 		}
 	}
@@ -128,12 +132,3 @@ func (s *Lambda) Synthesize(dir string, aggregates map[string]*eventing.Aggregat
 	return nil
 }
 
-func lambdaHandlerTs() []byte {
-	return []byte(`export const handler = async (event: unknown): Promise<{ statusCode: number; body: string }> => {
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ message: 'Hello, World!' }),
-  };
-};
-`)
-}

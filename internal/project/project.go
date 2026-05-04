@@ -52,6 +52,7 @@ const (
 	FormatJSON                      // pretty-printed JSON object with // managed comment key
 	FormatYAML                      // YAML document with # managed comment
 	FormatText                      // raw string value of the aggregate's "text" node; no managed comment
+	FormatTOML                      // TOML document with # managed comment
 )
 
 // Scaffolder is an optional interface that plugins implement to write one-time
@@ -398,6 +399,12 @@ func (p *Project) renderCrossCuttingFile(filename string, format FileFormat, agg
 			return fmt.Errorf("FormatText: 'text' node for %s is not a string", filename)
 		}
 		content = []byte(s)
+	case FormatTOML:
+		raw, err := agg.ToTOML()
+		if err != nil {
+			return fmt.Errorf("serialize %s: %w", filename, err)
+		}
+		content = AddTextMarker(raw, "#")
 	default:
 		return fmt.Errorf("unknown file format %d for %s", format, filename)
 	}

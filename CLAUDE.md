@@ -20,6 +20,7 @@ go test -run TestName ./internal/project/
 go test -run TestName ./internal/domains/node/
 go test -run TestName ./internal/domains/golang/
 go test -run TestName ./internal/plugins/git/
+go test -run TestName ./internal/plugins/fly/
 
 # Inspect output during test development
 FORGLET_KEEP_TEMP=1 go test -v ./...
@@ -146,6 +147,7 @@ func (p *MyPlugin) Weave(meta project.Meta, rc map[string]any, stream *project.E
 | `project.FormatJSON` | Pretty-printed JSON object, `//` managed comment key |
 | `project.FormatYAML` | YAML document, `#` managed comment header |
 | `project.FormatText` | Raw string value of the aggregate's `text` node; **no managed comment** (use for files where comment syntax would corrupt content, e.g. `LICENSE`) |
+| `project.FormatTOML` | TOML document, `#` managed comment header; uses `agg.ToTOML()` from the eventing library |
 
 `SetFormat` is last-write-wins. Multiple contributors may call it for the same file; since they must agree on the format (a file is either JSON or YAML, not both), conflicts indicate a design error and will surface in tests.
 
@@ -199,6 +201,7 @@ Single `go.mod` at the root (`github.com/forgant-foundry/forglet`):
 - `internal/plugins/lerna/` — Lerna monorepo (`lerna.json` via `FormatJSON`, `lerna` devDependency)
 - `internal/plugins/cdk/` — AWS CDK (`cdk.json` via `FormatJSON`, CDK devDependencies, scaffolds `bin/app.ts` + `lib/stack.ts`)
 - `internal/plugins/knative/` — Knative Serving; `Plugin` (node-ts): `.knative/service.yaml` via `FormatYAML`, `.dockerignore` via `FormatPattern`, scaffolds `Dockerfile`; `GoPlugin` (go-knative): `func.yaml` via `FormatYAML`, scaffolds `Dockerfile`, `handle.go`, `main.go`, `handle_test.go`
+- `internal/plugins/fly/` — Fly.io deployment; `fly.toml` via `FormatTOML`, `.github/workflows/deploy.yml` via `FormatYAML`, scaffolds a language-appropriate `Dockerfile` once (Go multi-stage, Java Maven, Node-TS with build step, Node-JS production-only); activated by `fly: true` or `fly: {region, port, memory, cpus, healthPath, main, branch}` in `.forglet.yml`; `main` is Go-only
 - `internal/testutil/` — shared `TempDir` helper
 
 ### Testing Conventions
@@ -223,7 +226,12 @@ Test layers:
 2. Implement `project.Plugin` (`Weave` method)
 3. For each cross-cutting file the plugin contributes to, call `stream.SetFormat(filename, format)` alongside `stream.Append` — do not add filenames to `project.go`
 4. Optionally implement `project.Scaffolder` (`Scaffold` method) for one-time files
-5. Register via `commands.RegisterPlugin` in the custom `main.go`
+5. For scaffold file content, embed files from a `scaffold/` subdirectory using `//go:embed` rather than inlining content as Go string literals — this keeps scaffolds readable and diffable:
+   ```go
+   //go:embed scaffold/handler.go
+   var handlerScaffold []byte
+   ```
+6. Register via `commands.RegisterPlugin` in the custom `main.go`
 
 The plugin must not assume it is the only contributor to any file. Check `meta.Template` for domain-awareness and inspect `stream.Events()` for plugin-awareness.
 

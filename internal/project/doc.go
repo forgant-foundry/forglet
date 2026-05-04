@@ -86,9 +86,10 @@
 // [EventStream.SetFormat] alongside its [EventStream.Append] calls.
 // [Project.Synthesize] then renders each registered file automatically using
 // one of the [FileFormat] constants ([FormatPattern], [FormatJSON], [FormatYAML],
-// [FormatText]). [FormatText] writes the aggregate's "text" node as raw bytes
+// [FormatText], [FormatTOML]). [FormatText] writes the aggregate's "text" node as raw bytes
 // with no managed-comment marker — use it for LICENSE files and other content
-// that must not be modified by forglet's comment injection.
+// that must not be modified by forglet's comment injection. [FormatTOML] writes
+// the aggregate as a TOML document with a # managed comment header.
 // No changes to project.go are needed when a new cross-cutting file is introduced.
 //
 // # Aggregate provenance

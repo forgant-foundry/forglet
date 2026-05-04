@@ -1,12 +1,22 @@
 package knative
 
 import (
+	_ "embed"
 	"encoding/json"
 	"path/filepath"
 
 	"github.com/forgant-foundry/eventing"
 	"github.com/forgant-foundry/forglet/internal/project"
 )
+
+//go:embed scaffold/handle.go
+var handleGoScaffold []byte
+
+//go:embed scaffold/main.go
+var mainGoScaffold []byte
+
+//go:embed scaffold/handle_test.go
+var handleTestGoScaffold []byte
 
 const (
 	knativeFuncSpecVersion = "0.35.0"
@@ -70,13 +80,13 @@ func (p *GoPlugin) Scaffold(dir string, _ project.Meta) error {
 	if err := scaffoldOnce(filepath.Join(dir, "Dockerfile"), goDockerfile()); err != nil {
 		return err
 	}
-	if err := scaffoldOnce(filepath.Join(dir, "handle.go"), goHandleGo()); err != nil {
+	if err := scaffoldOnce(filepath.Join(dir, "handle.go"), handleGoScaffold); err != nil {
 		return err
 	}
-	if err := scaffoldOnce(filepath.Join(dir, "main.go"), goMainGo()); err != nil {
+	if err := scaffoldOnce(filepath.Join(dir, "main.go"), mainGoScaffold); err != nil {
 		return err
 	}
-	return scaffoldOnce(filepath.Join(dir, "handle_test.go"), goHandleTestGo())
+	return scaffoldOnce(filepath.Join(dir, "handle_test.go"), handleTestGoScaffold)
 }
 
 func goDockerfile() []byte {
@@ -96,57 +106,3 @@ CMD ["./server"]
 `)
 }
 
-func goHandleGo() []byte {
-	return []byte(`package main
-
-import (
-	"fmt"
-	"net/http"
-)
-
-// Handle processes an incoming HTTP request.
-func Handle(res http.ResponseWriter, req *http.Request) {
-	fmt.Fprintln(res, "Hello, World!")
-}
-`)
-}
-
-func goMainGo() []byte {
-	return []byte(`package main
-
-import (
-	"log"
-	"net/http"
-	"os"
-)
-
-func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-	http.HandleFunc("/", Handle)
-	log.Printf("listening on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
-}
-`)
-}
-
-func goHandleTestGo() []byte {
-	return []byte(`package main
-
-import (
-	"net/http/httptest"
-	"strings"
-	"testing"
-)
-
-func TestHandle(t *testing.T) {
-	rec := httptest.NewRecorder()
-	Handle(rec, httptest.NewRequest("GET", "/", nil))
-	if !strings.Contains(rec.Body.String(), "Hello") {
-		t.Errorf("unexpected body: %q", rec.Body.String())
-	}
-}
-`)
-}
