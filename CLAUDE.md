@@ -195,7 +195,7 @@ Single `go.mod` at the root (`github.com/forgant-foundry/forglet`):
 - `internal/domains/node/` — `node-ts` and `node-js` synthesizers (`package.json`, `tsconfig.json`, `src/index.ts` / `index.js` scaffolds)
 - `internal/domains/golang/` — `go` and `go-workspace` synthesizers (`go.mod` / `go.work`, module scaffolds)
 - `internal/plugins/git/` — cross-cutting `.gitignore` support, driven by `meta.Template` + `rc["git"]`
-- `internal/plugins/github/` — GitHub Actions workflows (`ci.yml`, `release.yml`, `delivery.yml` via `FormatYAML`) and `.vergant.yml` (via `FormatYAML`); delivery uses vergant for branch-driven CD; supports `kind: library` for no-artifact releases; all vergant config fields (`majorVersion`, `defaultBranch`, branch regexes, `mode`) are driven from the `delivery` section of `.forglet.yml`
+- `internal/plugins/github/` — GitHub Actions workflows (`ci.yml`, `release.yml`, `delivery.yml` via `FormatYAML`) and `.vergant.yml` (via `FormatYAML`); delivery uses vergant for branch-driven CD; supports `kind: library` for no-artifact releases; all vergant config fields (`majorVersion`, `defaultBranch`, branch regexes, `mode`) are driven from the `delivery` section of `.forglet.yml`; when both `ci` and `delivery` are enabled, delivery.yml embeds a test job (same steps as ci.yml) and gates the delivery job on it via `needs: [test]`
 - `internal/plugins/license/` — managed `LICENSE` file via `FormatText`; built-in SPDX texts (MIT, Apache-2.0, GPL-3.0, AGPL-3.0, ISC); extended by platform teams via `WithCustom`
 - `internal/plugins/workspaces/` — npm workspaces (`private: true`, `workspaces: ["packages/*"]`)
 - `internal/plugins/lerna/` — Lerna monorepo (`lerna.json` via `FormatJSON`, `lerna` devDependency)
@@ -269,6 +269,24 @@ Forglet now runs `go mod tidy` automatically via `PostSynthesize` on every synth
 The remaining nuance: a developer who manually edits the indirect block will have those edits overwritten on the next synth, since `go mod tidy` re-derives the full transitive graph from scratch. This is correct behaviour — indirect deps are not yours to manage.
 
 *Discovered during the first live `forglet synth` run on the vergant project. Resolved by introducing `PostSynthesizer`.*
+
+### `delivery.kind: binary` Build Variants
+
+`goDeliveryBuildScript` in `internal/plugins/github/plugin.go` generates the standard set of four `go build` invocations (linux/darwin-amd64/darwin-arm64/windows). Additional variants can now be expressed via `.forglet.yml` using the `builds` array:
+
+```yaml
+delivery:
+  kind: binary
+  builds:
+    - tags: no_embeddings
+      suffix: slim
+```
+
+Each entry produces a parallel set of four platform artifacts with the suffix appended before the archive extension (e.g. `myapp_${SEM}_linux_amd64_slim.tar.gz`). All variant artifacts appear in the shared checksums file. The default (no `builds` key) produces the existing behaviour unchanged. Entries without a `suffix` are silently skipped to avoid artifact name collisions with the standard build.
+
+`builds` applies to Go binary delivery only. Non-Go templates (Node, Java) ignore it.
+
+*Discovered while managing fisma-ref-mcp, which requires slim builds alongside standard builds. Resolved by adding `builds` array to the `delivery` RC key.*
 
 ## Documentation Maintenance
 

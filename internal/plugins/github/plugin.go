@@ -30,6 +30,9 @@ const (
 //	    kind: library                  # vergant versioning + plain GitHub release, no artifacts
 //	    kind: binary                   # cross-compile + upload artifacts; also set main:
 //	    main: ./cmd/myapp              # Go main package path for binary builds (default: ".")
+//	    builds:                        # additional Go build variants (binary kind, Go only)
+//	      - tags: no_embeddings        #   build tags for this variant (space-separated)
+//	        suffix: slim               #   artifact suffix (e.g. myapp_${SEM}_linux_amd64_slim.tar.gz)
 //	    majorVersion: 2                # .vergant.yml: major version (default: 1)
 //	    defaultBranch: develop         # .vergant.yml: trunk branch (default: main)
 //	    supportBranchRegEx: "^release/.*"  # .vergant.yml: support branch pattern
@@ -84,7 +87,7 @@ func (p *GitHubActionsPlugin) Weave(meta project.Meta, rc map[string]any, stream
 	}
 
 	if delivery.enabled {
-		payload, err := json.Marshal(deliveryPayload(group, meta.Name, delivery.kind, delivery.mainPkg, delivery.versionVar))
+		payload, err := json.Marshal(deliveryPayload(group, meta.Template, meta.Name, delivery.kind, delivery.mainPkg, delivery.versionVar, delivery.builds, ci))
 		if err != nil {
 			return fmt.Errorf("github plugin: delivery payload: %w", err)
 		}
@@ -119,14 +122,24 @@ func (p *GitHubActionsPlugin) Weave(meta project.Meta, rc map[string]any, stream
 type deliveryCfg struct {
 	enabled            bool
 	kind               string
-	mainPkg            string // Go main package path for binary builds; defaults to "."
-	versionVar         string // Full -X linker path for version injection (e.g. pkg/commands.Version)
+	mainPkg            string          // Go main package path for binary builds; defaults to "."
+	versionVar         string          // Full -X linker path for version injection (e.g. pkg/commands.Version)
+	builds             []buildVariant  // additional Go build variants; binary kind only
 	majorVersion       int
 	defaultBranch      string
 	supportBranchRegEx string
 	devBranchRegEx     string
 	patchBranchRegEx   string
 	mode               string
+}
+
+// buildVariant describes one additional set of platform artifacts produced alongside
+// the standard binary builds. Each variant recompiles with the given build tags and
+// appends the suffix to every artifact filename (e.g. suffix "slim" →
+// myapp_${SEM}_linux_amd64_slim.tar.gz). suffix is required; entries without one are skipped.
+type buildVariant struct {
+	tags   string // Go build tags (e.g. "no_embeddings"); multiple tags are space-separated
+	suffix string // artifact filename suffix (required to avoid name collision with the standard build)
 }
 
 func defaultDeliveryCfg() deliveryCfg {
@@ -174,6 +187,20 @@ func parseRC(rc map[string]any) (ci, release bool, delivery deliveryCfg, branch 
 			if s, ok := d["mode"].(string); ok && s != "" {
 				delivery.mode = s
 			}
+			if bs, ok := d["builds"].([]any); ok {
+				for _, b := range bs {
+					if bm, ok := b.(map[string]any); ok {
+						v := buildVariant{}
+						if s, ok := bm["tags"].(string); ok {
+							v.tags = s
+						}
+						if s, ok := bm["suffix"].(string); ok {
+							v.suffix = s
+						}
+						delivery.builds = append(delivery.builds, v)
+					}
+				}
+			}
 		}
 		if b, ok := v["defaultBranch"].(string); ok && b != "" {
 			branch = b
@@ -195,19 +222,13 @@ func templateGroup(template string) string {
 	}
 }
 
-func ciPayload(group, template, branch string) map[string]any {
-	base := map[string]any{
-		"name": "ci",
-		"on": map[string]any{
-			"push":         map[string]any{"branches": []any{branch}},
-			"pull_request": map[string]any{"branches": []any{branch}},
-		},
-	}
-
-	var steps []any
+// ciSteps returns the test job steps for the given template group. It is shared
+// between the standalone ci.yml and the test job embedded in delivery.yml when
+// both ci and delivery are enabled.
+func ciSteps(group, template string) []any {
 	switch group {
 	case "go":
-		steps = []any{
+		return []any{
 			map[string]any{"uses": "actions/checkout@v4"},
 			map[string]any{
 				"uses": "actions/setup-go@v5",
@@ -216,7 +237,7 @@ func ciPayload(group, template, branch string) map[string]any {
 			map[string]any{"run": "go test ./..."},
 		}
 	case "java":
-		steps = []any{
+		return []any{
 			map[string]any{"uses": "actions/checkout@v4"},
 			map[string]any{
 				"uses": "actions/setup-java@v4",
@@ -230,7 +251,7 @@ func ciPayload(group, template, branch string) map[string]any {
 		if template == "node-lambda" {
 			runStep = "npm run build"
 		}
-		steps = []any{
+		return []any{
 			map[string]any{"uses": "actions/checkout@v4"},
 			map[string]any{
 				"uses": "actions/setup-node@v4",
@@ -240,9 +261,19 @@ func ciPayload(group, template, branch string) map[string]any {
 			map[string]any{"run": runStep},
 		}
 	}
+	return nil
+}
 
+func ciPayload(group, template, branch string) map[string]any {
+	base := map[string]any{
+		"name": "ci",
+		"on": map[string]any{
+			"push":         map[string]any{"branches": []any{branch}},
+			"pull_request": map[string]any{"branches": []any{branch}},
+		},
+	}
 	base["jobs"] = map[string]any{
-		"test": map[string]any{"runs-on": "ubuntu-latest", "steps": steps},
+		"test": map[string]any{"runs-on": "ubuntu-latest", "steps": ciSteps(group, template)},
 	}
 	return base
 }
@@ -312,7 +343,7 @@ func releasePayload(group, template string) map[string]any {
 	return base
 }
 
-func deliveryPayload(group, name, kind, mainPkg, versionVar string) map[string]any {
+func deliveryPayload(group, template, name, kind, mainPkg, versionVar string, builds []buildVariant, withTest bool) map[string]any {
 	const (
 		configureGit   = "git config user.email \"github-actions[bot]@users.noreply.github.com\"\ngit config user.name \"github-actions[bot]\""
 		installVergant = "go install github.com/forgant-foundry/vergant/cmd/vergant@latest"
@@ -350,7 +381,7 @@ func deliveryPayload(group, name, kind, mainPkg, versionVar string) map[string]a
 				map[string]any{
 					"if":   ifRelease,
 					"name": "Build release binaries",
-					"run":  goDeliveryBuildScript(name, mainPkg, versionVar),
+					"run":  goDeliveryBuildScript(name, mainPkg, versionVar, builds),
 				},
 				map[string]any{
 					"env":  map[string]any{"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"},
@@ -417,16 +448,20 @@ func deliveryPayload(group, name, kind, mainPkg, versionVar string) map[string]a
 		}
 	}
 
+	deliveryJob := map[string]any{
+		"runs-on":     "ubuntu-latest",
+		"permissions": map[string]any{"contents": "write"},
+		"steps":       steps,
+	}
+	jobs := map[string]any{"delivery": deliveryJob}
+	if withTest {
+		jobs["test"] = map[string]any{"runs-on": "ubuntu-latest", "steps": ciSteps(group, template)}
+		deliveryJob["needs"] = []any{"test"}
+	}
 	return map[string]any{
 		"name": "delivery",
 		"on":   map[string]any{"push": map[string]any{"branches": []any{"**"}}},
-		"jobs": map[string]any{
-			"delivery": map[string]any{
-				"runs-on":     "ubuntu-latest",
-				"permissions": map[string]any{"contents": "write"},
-				"steps":       steps,
-			},
-		},
+		"jobs": jobs,
 	}
 }
 
@@ -457,7 +492,28 @@ func vergantPayload(cfg deliveryCfg) map[string]any {
 	return m
 }
 
-func goDeliveryBuildScript(name, mainPkg, versionVar string) string {
+// platformBuildLines generates the go build + archive commands for one binary variant
+// across all four target platforms. binName is the temporary executable name (no .exe);
+// artifactSuffix is appended before the archive extension (e.g. "_slim"); tagFlag is
+// the -tags flag string with a leading space (e.g. " -tags no_embeddings"), or "".
+func platformBuildLines(name, mainPkg, binName, artifactSuffix, tagFlag string) string {
+	return fmt.Sprintf(`
+
+GOOS=linux  GOARCH=amd64 go build%[5]s -ldflags="$LDFLAGS" -o /tmp/%[3]s %[2]s
+tar czf "dist/%[1]s_${SEM}_linux_amd64%[4]s.tar.gz" -C /tmp %[3]s
+
+GOOS=darwin GOARCH=amd64 go build%[5]s -ldflags="$LDFLAGS" -o /tmp/%[3]s %[2]s
+tar czf "dist/%[1]s_${SEM}_darwin_amd64%[4]s.tar.gz" -C /tmp %[3]s
+
+GOOS=darwin GOARCH=arm64 go build%[5]s -ldflags="$LDFLAGS" -o /tmp/%[3]s %[2]s
+tar czf "dist/%[1]s_${SEM}_darwin_arm64%[4]s.tar.gz" -C /tmp %[3]s
+
+GOOS=windows GOARCH=amd64 go build%[5]s -ldflags="$LDFLAGS" -o /tmp/%[3]s.exe %[2]s
+cd /tmp && zip "${GITHUB_WORKSPACE}/dist/%[1]s_${SEM}_windows_amd64%[4]s.zip" %[3]s.exe && cd -`,
+		name, mainPkg, binName, artifactSuffix, tagFlag)
+}
+
+func goDeliveryBuildScript(name, mainPkg, versionVar string, builds []buildVariant) string {
 	if mainPkg == "" {
 		mainPkg = "."
 	}
@@ -465,25 +521,24 @@ func goDeliveryBuildScript(name, mainPkg, versionVar string) string {
 	if versionVar != "" {
 		ldflags = fmt.Sprintf("-s -w -X %s=${SEM}", versionVar)
 	}
-	return fmt.Sprintf(
-		`VERSION="${{ steps.version.outputs.tag }}"
+	var sb strings.Builder
+	fmt.Fprintf(&sb, `VERSION="${{ steps.version.outputs.tag }}"
 SEM="${VERSION#v}"
-LDFLAGS="%[3]s"
-mkdir -p dist
-
-GOOS=linux  GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s %[2]s
-tar czf "dist/%[1]s_${SEM}_linux_amd64.tar.gz" -C /tmp %[1]s
-
-GOOS=darwin GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s %[2]s
-tar czf "dist/%[1]s_${SEM}_darwin_amd64.tar.gz" -C /tmp %[1]s
-
-GOOS=darwin GOARCH=arm64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s %[2]s
-tar czf "dist/%[1]s_${SEM}_darwin_arm64.tar.gz" -C /tmp %[1]s
-
-GOOS=windows GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/%[1]s.exe %[2]s
-cd /tmp && zip "${GITHUB_WORKSPACE}/dist/%[1]s_${SEM}_windows_amd64.zip" %[1]s.exe && cd -
-
-cd dist && sha256sum *.tar.gz *.zip > "%[1]s_${SEM}_checksums.txt"`, name, mainPkg, ldflags)
+LDFLAGS="%s"
+mkdir -p dist`, ldflags)
+	sb.WriteString(platformBuildLines(name, mainPkg, name, "", ""))
+	for _, v := range builds {
+		if v.suffix == "" {
+			continue
+		}
+		tagFlag := ""
+		if v.tags != "" {
+			tagFlag = " -tags " + v.tags
+		}
+		sb.WriteString(platformBuildLines(name, mainPkg, name+"_"+v.suffix, "_"+v.suffix, tagFlag))
+	}
+	fmt.Fprintf(&sb, "\n\ncd dist && sha256sum *.tar.gz *.zip > \"%s_${SEM}_checksums.txt\"", name)
+	return sb.String()
 }
 
 func (p *GitHubActionsPlugin) RCSchema() project.SchemaContribution {
@@ -499,6 +554,24 @@ func (p *GitHubActionsPlugin) RCSchema() project.SchemaContribution {
 			"main": map[string]any{
 				"type":        "string",
 				"description": "Go main package path for binary builds (e.g. ./cmd/myapp). Default: \".\".",
+			},
+			"builds": map[string]any{
+				"type":        "array",
+				"description": "Additional Go build variants (binary kind only). Each produces a parallel set of platform artifacts with a suffix-qualified filename.",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"tags": map[string]any{
+							"type":        "string",
+							"description": "Go build tags for this variant (e.g. no_embeddings). Multiple tags are space-separated.",
+						},
+						"suffix": map[string]any{
+							"type":        "string",
+							"description": "Artifact filename suffix (e.g. slim → myapp_${SEM}_linux_amd64_slim.tar.gz). Required.",
+						},
+					},
+					"required": []any{"suffix"},
+				},
 			},
 			"versionVar": map[string]any{
 				"type":        "string",

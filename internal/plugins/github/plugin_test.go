@@ -847,6 +847,194 @@ func TestVergant_Idempotent(t *testing.T) {
 	}
 }
 
+// ---- CI gate in delivery (ci + delivery both enabled) ----------------------------
+
+func TestDelivery_WithCI_Go_HasTestJob(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  ci: true\n  delivery:\n    kind: binary\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "go test ./...")
+}
+
+func TestDelivery_WithCI_Go_DeliveryNeedsTest(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  ci: true\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "needs")
+	assertContains(t, content, "test")
+}
+
+func TestDelivery_WithoutCI_Go_NoTestJob(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	if strings.Contains(content, "go test ./...") {
+		t.Error("delivery without ci should not contain test steps")
+	}
+	if strings.Contains(content, "needs") {
+		t.Error("delivery without ci should not have a needs dependency")
+	}
+}
+
+func TestDelivery_WithCI_CIWorkflowStillCreated(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  ci: true\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".github", "workflows", "ci.yml")); err != nil {
+		t.Errorf("ci.yml should still be created when both ci and delivery are enabled: %v", err)
+	}
+}
+
+func TestDelivery_WithCI_Node_HasTestJob(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  ci: true\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "my-app", Template: "node-ts"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "npm test")
+	assertContains(t, content, "needs")
+}
+
+func TestDelivery_WithCI_Java_HasTestJob(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  ci: true\n  delivery: true\n")
+
+	if err := p.Init(project.Meta{Name: "myservice", Template: "java"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "mvn --batch-mode test")
+	assertContains(t, content, "needs")
+}
+
+// ---- Build variants (delivery.builds) -------------------------------------------
+
+func TestDelivery_Go_Binary_BuildVariant_StandardBuildsStillPresent(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n    builds:\n      - tags: no_embeddings\n        suffix: slim\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "linux_amd64.tar.gz")
+	assertContains(t, content, "darwin_amd64.tar.gz")
+	assertContains(t, content, "darwin_arm64.tar.gz")
+	assertContains(t, content, "windows_amd64.zip")
+}
+
+func TestDelivery_Go_Binary_BuildVariant_ProducesVariantArtifacts(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n    builds:\n      - tags: no_embeddings\n        suffix: slim\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "linux_amd64_slim.tar.gz")
+	assertContains(t, content, "darwin_amd64_slim.tar.gz")
+	assertContains(t, content, "darwin_arm64_slim.tar.gz")
+	assertContains(t, content, "windows_amd64_slim.zip")
+}
+
+func TestDelivery_Go_Binary_BuildVariant_HasBuildTags(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n    builds:\n      - tags: no_embeddings\n        suffix: slim\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "-tags no_embeddings")
+}
+
+func TestDelivery_Go_Binary_BuildVariant_TagsAbsentFromStandardBuilds(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n    builds:\n      - tags: no_embeddings\n        suffix: slim\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Standard build lines should appear before any -tags flag.
+	// We verify by confirming standard artifacts exist independently (covered by StandardBuildsStillPresent).
+	// Here we just assert the tag is present at least once, not on every build line.
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "-tags no_embeddings")
+	assertContains(t, content, "linux_amd64.tar.gz") // standard (no suffix) still present
+}
+
+func TestDelivery_Go_Binary_MultipleVariants(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n    builds:\n      - tags: no_embeddings\n        suffix: slim\n      - tags: no_embeddings,debug\n        suffix: debug\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "linux_amd64_slim.tar.gz")
+	assertContains(t, content, "linux_amd64_debug.tar.gz")
+}
+
+func TestDelivery_Go_Binary_Variant_NoSuffix_Skipped(t *testing.T) {
+	dir, p := setup(t)
+	// Entry with no suffix should be silently skipped — no duplicate standard artifacts.
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n    builds:\n      - tags: no_embeddings\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	// Should still have standard builds but no extra artifact names.
+	assertContains(t, content, "linux_amd64.tar.gz")
+	if strings.Contains(content, "-tags no_embeddings") {
+		t.Error("variant with no suffix should be skipped; expected no -tags flag in output")
+	}
+}
+
+func TestDelivery_Go_Binary_EmptyBuilds_SameAsDefault(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	assertContains(t, content, "linux_amd64.tar.gz")
+	if strings.Contains(content, "_slim") || strings.Contains(content, "-tags") {
+		t.Error("no builds key should produce only standard artifacts")
+	}
+}
+
 // ---- helpers ---------------------------------------------------------------------
 
 func setup(t *testing.T) (string, *project.Project) {

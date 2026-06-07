@@ -150,6 +150,10 @@ github:
     kind: library                      # vergant versioning + plain GitHub release, no artifacts (default)
     kind: binary                       # cross-compile Go binaries + upload artifacts
     main: ./cmd/myapp                  # Go main package path for binary builds (default: ".")
+    versionVar: github.com/org/app/commands.Version  # inject semver into binary via -X ldflag
+    builds:                            # additional Go build variants (binary kind only)
+      - tags: no_embeddings            #   build tags for this variant (space-separated)
+        suffix: slim                   #   artifact suffix (e.g. myapp_${SEM}_linux_amd64_slim.tar.gz)
     majorVersion: 2                    # .vergant.yml: current major version (default: 1)
     defaultBranch: develop             # .vergant.yml: trunk branch (default: main)
     supportBranchRegEx: "^release/.*" # .vergant.yml: support branch pattern
@@ -157,6 +161,9 @@ github:
     patchBranchRegEx: "^hotfix/(.+)$" # .vergant.yml: patch/pre-release branch pattern
     mode: candidate                    # .vergant.yml: "release" or "candidate" (default: release)
   defaultBranch: "develop"             # CI trigger branch (default: main)
+                                       # When ci and delivery are both enabled, delivery.yml
+                                       # embeds the test job and gates delivery on it via
+                                       # needs: [test]. ci.yml is still emitted for PR checks.
 
 license: MIT                           # LicensePlugin: managed LICENSE file (shorthand)
 license:                               # LicensePlugin: with year and copyright holder

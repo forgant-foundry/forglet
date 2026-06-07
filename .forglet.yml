@@ -16,6 +16,7 @@ license:
   author: Forgant
 
 github:
+  ci: true
   delivery:
     kind: binary
     main: ./cmd/forglet
