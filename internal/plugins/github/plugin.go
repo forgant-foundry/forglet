@@ -535,7 +535,7 @@ mkdir -p dist`, ldflags)
 		if v.tags != "" {
 			tagFlag = " -tags " + v.tags
 		}
-		sb.WriteString(platformBuildLines(name, mainPkg, name+"_"+v.suffix, "_"+v.suffix, tagFlag))
+		sb.WriteString(platformBuildLines(name, mainPkg, name, "_"+v.suffix, tagFlag))
 	}
 	fmt.Fprintf(&sb, "\n\ncd dist && sha256sum *.tar.gz *.zip > \"%s_${SEM}_checksums.txt\"", name)
 	return sb.String()

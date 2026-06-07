@@ -39,6 +39,8 @@
 //     The optional builds array adds extra variants: each entry recompiles with the given
 //     build tags and produces a parallel set of platform artifacts with the suffix
 //     appended before the extension (e.g. suffix "slim" → myapp_${SEM}_linux_amd64_slim.tar.gz).
+//     The binary inside every archive — standard and variant — is always named after the
+//     project (e.g. myapp); the suffix appears only in the archive filename.
 //     All variant artifacts are included in the shared checksums file. suffix is required
 //     on each entry (entries without one are silently skipped to avoid name collisions).
 //   - Node: npm version + npm publish to the npm registry (requires NPM_TOKEN secret)

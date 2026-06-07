@@ -1020,6 +1020,22 @@ func TestDelivery_Go_Binary_Variant_NoSuffix_Skipped(t *testing.T) {
 	}
 }
 
+func TestDelivery_Go_Binary_BuildVariant_BinaryUsesBaseName(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n    builds:\n      - tags: no_embeddings\n        suffix: slim\n")
+
+	if err := p.Init(project.Meta{Name: "myapp", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".github", "workflows", "delivery.yml"))
+	// The binary inside each variant archive must be the base name, not name_suffix.
+	assertContains(t, content, "-o /tmp/myapp ")
+	if strings.Contains(content, "-o /tmp/myapp_slim") {
+		t.Error("variant binary should be named 'myapp', not 'myapp_slim'")
+	}
+}
+
 func TestDelivery_Go_Binary_EmptyBuilds_SameAsDefault(t *testing.T) {
 	dir, p := setup(t)
 	writeRC(t, dir, "github:\n  delivery:\n    kind: binary\n")

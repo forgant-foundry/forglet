@@ -154,6 +154,7 @@ github:
     builds:                            # additional Go build variants (binary kind only)
       - tags: no_embeddings            #   build tags for this variant (space-separated)
         suffix: slim                   #   artifact suffix (e.g. myapp_${SEM}_linux_amd64_slim.tar.gz)
+                                       #   the binary inside every archive is always named 'myapp'
     majorVersion: 2                    # .vergant.yml: current major version (default: 1)
     defaultBranch: develop             # .vergant.yml: trunk branch (default: main)
     supportBranchRegEx: "^release/.*" # .vergant.yml: support branch pattern

@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **`delivery.builds` binary name in archives.** Variant builds (entries in `delivery.builds`) now produce archives whose extracted binary is named after the project (e.g. `myapp`), matching the standard build. Previously the binary was named `myapp_<suffix>` (e.g. `myapp_slim`), which required users to rename it after extraction. The suffix continues to appear in the archive filename only (e.g. `myapp_${SEM}_linux_amd64_slim.tar.gz`).
+
 ## [0.1.0] - 2026-04-25
 
 First public release. Everything below was built together as a cohesive initial release.
