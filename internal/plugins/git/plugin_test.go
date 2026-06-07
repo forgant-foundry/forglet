@@ -142,10 +142,56 @@ func TestGitPlugin_Go_CreatesGitignore(t *testing.T) {
 	}
 
 	content := readFile(t, filepath.Join(dir, ".gitignore"))
-	for _, want := range []string{"*.exe", "*.out", "*.test", "coverage.out", ".forglet/"} {
+	for _, want := range []string{"vendor/", "*.exe", "*.out", "*.test", "coverage.out", ".forglet/"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("expected %q in .gitignore:\n%s", want, content)
 		}
+	}
+}
+
+func TestGitPlugin_Go_IncludesBinaryName(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\n")
+
+	if err := p.Init(project.Meta{Name: "my-cli", Template: "go"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	if !strings.Contains(content, "my-cli") {
+		t.Errorf("expected binary name %q in .gitignore:\n%s", "my-cli", content)
+	}
+}
+
+func TestGitPlugin_Go_BinaryNameVariesByProject(t *testing.T) {
+	for _, name := range []string{"mytool", "fisma-ref-mcp", "go-server"} {
+		t.Run(name, func(t *testing.T) {
+			dir, p := setup(t)
+			writeRC(t, dir, "git: true\n")
+
+			if err := p.Init(project.Meta{Name: name, Template: "go"}, &noopSynth{}); err != nil {
+				t.Fatal(err)
+			}
+
+			content := readFile(t, filepath.Join(dir, ".gitignore"))
+			if !strings.Contains(content, name) {
+				t.Errorf("expected binary name %q in .gitignore:\n%s", name, content)
+			}
+		})
+	}
+}
+
+func TestGitPlugin_Go_BinaryNameNotAddedForNonGoTemplates(t *testing.T) {
+	dir, p := setup(t)
+	writeRC(t, dir, "git: true\n")
+
+	if err := p.Init(project.Meta{Name: "my-lib", Template: "node-ts"}, &noopSynth{}); err != nil {
+		t.Fatal(err)
+	}
+
+	content := readFile(t, filepath.Join(dir, ".gitignore"))
+	if strings.Contains(content, "my-lib") {
+		t.Error("binary name should not be added for non-Go templates")
 	}
 }
 

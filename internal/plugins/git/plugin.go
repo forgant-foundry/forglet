@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/forgant-foundry/eventing"
 	"github.com/forgant-foundry/forglet/internal/project"
@@ -31,11 +32,11 @@ var systemCategories = []systemCategory{
 // templatePatterns maps template names to their stack-specific gitignore patterns.
 // OS and IDE patterns are not repeated here — they live in systemCategories above.
 var templatePatterns = map[string][]string{
-	// Go
-	"go":           {"*.exe", "*.exe~", "*.out", "*.test", "coverage.out"},
-	"go-workspace": {"*.exe", "*.exe~", "*.out", "*.test", "coverage.out"},
-	"go-lambda":    {"*.exe", "*.exe~", "*.out", "*.test", "bootstrap", "coverage.out"},
-	"go-knative":   {"*.exe", "*.exe~", "*.out", "*.test", "coverage.out"},
+	// Go — binary name is added dynamically from meta.Name in Weave
+	"go":           {"vendor/", "*.exe", "*.exe~", "*.out", "*.test", "coverage.out"},
+	"go-workspace": {"vendor/", "*.exe", "*.exe~", "*.out", "*.test", "coverage.out"},
+	"go-lambda":    {"vendor/", "*.exe", "*.exe~", "*.out", "*.test", "bootstrap", "coverage.out"},
+	"go-knative":   {"vendor/", "*.exe", "*.exe~", "*.out", "*.test", "coverage.out"},
 	// Java
 	"java":             {"*.class", "target/"},
 	"java-multimodule": {"*.class", "target/"},
@@ -93,6 +94,12 @@ func (p *Plugin) Weave(meta project.Meta, rc map[string]any, stream *project.Eve
 
 	if err := appendPatterns(stream, "git.ignore.template", ps); err != nil {
 		return err
+	}
+
+	if strings.HasPrefix(meta.Template, "go") && meta.Name != "" {
+		if err := appendPatterns(stream, "git.ignore.binary", []string{meta.Name}); err != nil {
+			return err
+		}
 	}
 
 	if len(giRC.add) > 0 {
